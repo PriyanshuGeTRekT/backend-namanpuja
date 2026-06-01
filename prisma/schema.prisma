@@ -1,0 +1,276 @@
+// ─────────────────────────────────────────────────────────────
+// namanpuja.com — Prisma schema
+// Postgres (Supabase). Application tables live in the `public`
+// schema alongside Atomic CRM's own tables.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── Geography ─────────────────────────────────────────────────
+
+model Country {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  isoCode   String?  @db.VarChar(3) // e.g. "IN", "US"
+  flagEmoji String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  cities    City[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("countries")
+}
+
+model City {
+  id        String  @id @default(cuid())
+  name      String
+  slug      String
+  state     String? // e.g. "Uttar Pradesh"
+  latitude  Float?
+  longitude Float?
+  geoRegion String? // e.g. "IN-UP" for geo meta tags
+  enabled   Boolean @default(true)
+  isPopular Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  countryId String
+  country   Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+
+  pujaLocations PujaLocation[]
+  temples       Temple[]
+  bookings      Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([countryId, slug])
+  @@index([countryId])
+  @@map("cities")
+}
+
+// ── Puja catalog ──────────────────────────────────────────────
+
+model PujaCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  icon        String?
+  sortOrder   Int     @default(0)
+  enabled     Boolean @default(true)
+  pujas       Puja[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("puja_categories")
+}
+
+enum PujaServiceType {
+  EPUJA // online / e-puja
+  HOME_VISIT // pandit visits the home
+  BOTH
+}
+
+// A master puja (e.g. "Satyanarayan Puja"). City-specific SEO
+// content lives in PujaLocation.
+model Puja {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  subtitle    String?
+  shortDesc   String?         @db.Text
+  description String?         @db.Text
+  serviceType PujaServiceType @default(BOTH)
+  durationMin Int? // typical duration in minutes
+  basePrice   Decimal?        @db.Decimal(10, 2)
+  currency    String          @default("INR") @db.VarChar(3)
+  heroImage   String?
+  gallery     String[]        @default([])
+  deity       String? // e.g. "Lord Vishnu (Satyanarayan)"
+  enabled     Boolean         @default(true)
+  isFeatured  Boolean         @default(false)
+  sortOrder   Int             @default(0)
+
+  // Reusable templates (used to pre-fill new PujaLocation pages)
+  benefits  Json? // string[]
+  rituals   Json? // { name, description }[]
+  samagri   Json? // { group, items: string[] }[]
+  occasions Json? // string[]
+  faqs      Json? // { question, answer }[]
+
+  categoryId String?
+  category   PujaCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  locations PujaLocation[]
+  bookings  Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@map("pujas")
+}
+
+// The SEO landing page for a (puja × city) combination — mirrors
+// the structure of the reference content document.
+model PujaLocation {
+  id       String @id @default(cuid())
+  pujaId   String
+  cityId   String
+  puja     Puja   @relation(fields: [pujaId], references: [id], onDelete: Cascade)
+  city     City   @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  slug        String  @unique // e.g. "satyanarayan-puja-in-san-diego-california"
+  h1          String
+  heroTagline String? @db.Text
+  intro       String? @db.Text
+
+  // Flexible content blocks (heading + html/markdown body)
+  sections     Json? // { heading, body }[]
+  benefits     Json? // string[] | { title, description }[]
+  rituals      Json? // { name, description }[]
+  samagri      Json? // { group, items: string[] }[]
+  whyChooseUs  Json? // { title, description }[]
+  occasions    Json? // string[]
+  serviceAreas Json? // string[] (nearby suburbs/areas)
+  faqs         Json? // { question, answer }[]
+  cta          Json? // { heading, bullets: string[], body, buttonLabel }
+
+  // SEO block
+  metaTitle       String?
+  metaDescription String? @db.Text
+  keywords        String[] @default([])
+  ogImage         String?
+  canonicalUrl    String?
+  breadcrumb      Json? // string[] e.g. ["Home","India","UP","Varanasi","Satyanarayan Puja"]
+  internalLinks   Json? // { label, href }[]
+  imageAlt        String?
+
+  published Boolean @default(false)
+  views     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([pujaId, cityId])
+  @@index([cityId])
+  @@index([pujaId])
+  @@map("puja_locations")
+}
+
+// ── Temples ───────────────────────────────────────────────────
+
+model Temple {
+  id           String  @id @default(cuid())
+  name         String
+  slug         String  @unique
+  deity        String?
+  shortDesc    String? @db.Text
+  description  String? @db.Text
+  history      String? @db.Text
+  significance String? @db.Text
+  timings      String?
+  address      String? @db.Text
+  latitude     Float?
+  longitude    Float?
+  heroImage    String?
+  gallery      String[] @default([])
+  metaTitle       String?
+  metaDescription String? @db.Text
+  keywords        String[] @default([])
+  enabled      Boolean @default(true)
+  isFeatured   Boolean @default(false)
+  sortOrder    Int     @default(0)
+
+  cityId String?
+  city   City?   @relation(fields: [cityId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cityId])
+  @@map("temples")
+}
+
+// ── Bookings ──────────────────────────────────────────────────
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model Booking {
+  id          String          @id @default(cuid())
+  reference   String          @unique // human-friendly e.g. NP-2026-0001
+  serviceType PujaServiceType @default(HOME_VISIT)
+  status      BookingStatus   @default(PENDING)
+
+  // Customer
+  customerName  String
+  customerEmail String
+  customerPhone String
+  notes         String? @db.Text
+
+  // Scheduling
+  preferredDate DateTime?
+  preferredTime String?
+  addressLine   String?  @db.Text
+  pincode       String?
+
+  // What & where
+  pujaId String?
+  puja   Puja?   @relation(fields: [pujaId], references: [id], onDelete: SetNull)
+  cityId String?
+  city   City?   @relation(fields: [cityId], references: [id], onDelete: SetNull)
+
+  amount   Decimal? @db.Decimal(10, 2)
+  currency String   @default("INR") @db.VarChar(3)
+
+  // CRM sync bookkeeping
+  crmContactId Int?
+  crmDealId    Int?
+  crmSyncedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([pujaId])
+  @@index([cityId])
+  @@map("bookings")
+}
+
+// ── Admin users ───────────────────────────────────────────────
+
+enum AdminRole {
+  SUPER_ADMIN
+  EDITOR
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         AdminRole @default(EDITOR)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
