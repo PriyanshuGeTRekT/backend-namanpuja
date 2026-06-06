@@ -1,0 +1,2 @@
+# Don't ship TypeScript sources to Vercel — only the compiled dist/ + api/ entry.
+src/
