@@ -1,0 +1,88 @@
+# ─────────────────────────────────────────────────────────────
+# Naman Puja — full local stack in one command.
+#
+#   cd backend-namanpuja
+#   docker compose up --build
+#
+# Brings up: Postgres + Backend API + Website + Admin panel.
+# (Atomic CRM runs separately — it needs its own Supabase stack.
+#  See docs/atomic-crm-integration.md.)
+#
+# Assumes the four repos are cloned as siblings:
+#   namanpuja/
+#   ├── backend-namanpuja/   ← run docker compose from here
+#   ├── frontend-namanpuja/
+#   ├── adminpanel-namanpuja/
+#   └── crm-namanpuja/
+#
+# Ports:  website :3000 · admin :5173 · API :4000 · postgres :5433
+# Logins: admin@namanpuja.com / ChangeMe123!  (admin panel)
+# ─────────────────────────────────────────────────────────────
+name: namanpuja
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: naman
+      POSTGRES_PASSWORD: naman
+      POSTGRES_DB: namanpuja
+    ports:
+      - "5433:5432"
+    volumes:
+      - namanpuja_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naman -d namanpuja"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  backend:
+    build:
+      context: .
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      # Inside the compose network Postgres is reachable at db:5432.
+      DATABASE_URL: postgresql://naman:naman@db:5432/namanpuja
+      DIRECT_URL: postgresql://naman:naman@db:5432/namanpuja
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      JWT_SECRET: local-dev-secret-not-for-production
+      JWT_EXPIRES_IN: 7d
+      SEED_ADMIN_EMAIL: admin@namanpuja.com
+      SEED_ADMIN_PASSWORD: ChangeMe123!
+      # CRM sync is off locally; flip on + add SUPABASE_* to mirror bookings.
+      CRM_ENABLED: "false"
+      CRM_DEFAULT_SALES_ID: "1"
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend-namanpuja
+    environment:
+      # Browser talks to the backend via localhost; the container talks to it
+      # over the compose network (api.ts prefers API_INTERNAL_URL on the server).
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+      API_INTERNAL_URL: http://backend:4000/api
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  admin:
+    build:
+      context: ../adminpanel-namanpuja
+    environment:
+      VITE_API_URL: http://localhost:4000/api/admin
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  namanpuja_db_data:
