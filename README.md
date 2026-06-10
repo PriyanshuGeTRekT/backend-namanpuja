@@ -1,5 +1,10 @@
 # backend-namanpuja
 
+> 🚀 **New to the project?** Start with **[ONBOARDING.md](ONBOARDING.md)** — a from-zero
+> guide to install everything and run the whole stack with one command.
+> TL;DR: clone the 4 repos as siblings, drop in `.env.docker` (ask the owner), then
+> `cd backend-namanpuja && docker compose up --build`.
+
 REST API for [namanpuja.com](https://namanpuja.com) — powers the public website and the admin panel, and syncs bookings into **Atomic CRM**.
 
 ## Tech stack
