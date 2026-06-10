@@ -1,6 +1,6 @@
 # Running Naman Puja locally
 
-The four apps are expected to be cloned as **siblings** in one folder:
+The four apps are cloned as **siblings** in one folder:
 
 ```
 namanpuja/
@@ -10,53 +10,46 @@ namanpuja/
 └── crm-namanpuja/
 ```
 
-## ✅ Easiest: one command with Docker (recommended)
+## ✅ One command with Docker (recommended)
 
-The only prerequisite is **Docker Desktop**. No Node, no Postgres, no `.env`
-juggling — the database is created, migrated, and seeded automatically.
+Only prerequisite: **Docker Desktop**. Everyone shares the **live cloud Supabase**
+database (and the same Atomic CRM data) — no local Postgres, no migrations to run.
 
 ```bash
 cd backend-namanpuja
+cp .env.docker.example .env.docker     # first time only — fill in the real secrets
 docker compose up --build
 ```
 
-That's it. Wait ~1–2 minutes the first time (it builds images + seeds), then:
+> Ask the project owner for the real `.env.docker` values (DB URL, JWT secret,
+> Supabase service-role key). They're shared **privately**, never committed.
+
+Then open:
 
 | App | URL | Login |
 | --- | --- | --- |
 | Website | http://localhost:3000 | — |
 | Admin panel | http://localhost:5173 | admin@namanpuja.com / ChangeMe123! |
+| Atomic CRM | http://localhost:5174 | admin@namanpuja.com / *(CRM password)* |
 | Backend API | http://localhost:4000 | — |
-| Postgres | localhost:5433 | naman / naman |
 
-Stop with `Ctrl+C`, or `docker compose down` (add `-v` to also wipe the DB).
+Stop with `Ctrl+C` (or `docker compose down`). Because the DB is the live cloud
+Supabase, the data is always there — no seeding needed.
 
-> The **Atomic CRM** isn't in this compose — it needs its own Supabase stack.
-> Run it separately (see `docs/atomic-crm-integration.md`), or use the deployed
-> one at https://crm-namanpuja.vercel.app.
+## ⚠️ Important
 
-## 🛠 Alternative: run on the host with Node
+- **You're on the LIVE database.** Edits (and bookings) are real and shared by
+  the whole team. Don't run destructive commands.
+- **Don't run `npm run prisma:migrate`** (that's `prisma migrate dev`, which
+  creates new migrations and expects a throwaway DB). The container runs
+  `prisma migrate deploy` automatically, which only applies already-committed
+  migrations.
+- That `P1001: Can't reach database server at localhost:5433` error means you
+  were pointing at a local Postgres that isn't running. With this Docker setup
+  you don't use a local DB at all — just `docker compose up`.
 
-If you prefer running the apps natively (Node 20+ and Docker for Postgres):
+## 🛠 Want an isolated local database instead?
 
-```bash
-# 1. database
-docker run -d --name namanpuja-db \
-  -e POSTGRES_USER=naman -e POSTGRES_PASSWORD=naman -e POSTGRES_DB=namanpuja \
-  -p 5433:5432 postgres:16-alpine
-
-# 2. backend  (.env → DATABASE_URL / DIRECT_URL = postgresql://naman:naman@localhost:5433/namanpuja)
-cd backend-namanpuja && npm install && npx prisma migrate deploy && npm run db:seed && npm run dev
-
-# 3. website   (in another terminal)
-cd frontend-namanpuja && npm install && npm run dev
-
-# 4. admin     (in another terminal)
-cd adminpanel-namanpuja && npm install && npm run dev
-```
-
-## ⚠️ Common mistake
-
-Don't copy `.env.example` and leave the **placeholders** in — values like
-`[PASSWORD]` and `[PROJECT_REF]` are not real. With Docker compose you don't
-touch `.env` at all; the compose file sets everything for you.
+If you'd rather not share the live DB, point `.env.docker` at a local Postgres
+and add a `db` service back (ask the owner for the local-DB compose variant), or
+run the old `start-stack.sh` which spins up a local Dockerised Postgres.
