@@ -1,6 +1,9 @@
 import { z } from 'zod';
-import { prisma } from '../config/prisma.js';
+import mongoose from 'mongoose';
 import { syncBookingToCrm } from '../services/crm/atomicCrm.js';
+import { Booking } from '../models/Booking.js';
+import { Puja } from '../models/Puja.js';
+import { City } from '../models/City.js';
 
 const bookingSchema = z.object({
   serviceType: z.enum(['EPUJA', 'HOME_VISIT', 'BOTH']).default('HOME_VISIT'),
@@ -14,6 +17,7 @@ const bookingSchema = z.object({
   pincode: z.string().optional(),
   pujaId: z.string().optional(),
   cityId: z.string().optional(),
+  userId: z.string().optional(),
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
@@ -21,8 +25,8 @@ export type BookingInput = z.infer<typeof bookingSchema>;
 /** Generate a human-friendly booking reference like NP-2026-000123. */
 async function nextReference(): Promise<string> {
   const year = new Date().getFullYear();
-  const countThisYear = await prisma.booking.count({
-    where: { createdAt: { gte: new Date(`${year}-01-01T00:00:00.000Z`) } },
+  const countThisYear = await Booking.countDocuments({
+    createdAt: { $gte: new Date(`${year}-01-01T00:00:00.000Z`) },
   });
   const seq = String(countThisYear + 1).padStart(6, '0');
   return `NP-${year}-${seq}`;
@@ -31,32 +35,35 @@ async function nextReference(): Promise<string> {
 export async function createBooking(raw: unknown) {
   const input = bookingSchema.parse(raw);
 
+  const pujaIdValid = input.pujaId && mongoose.Types.ObjectId.isValid(input.pujaId) ? input.pujaId : null;
+  const cityIdValid = input.cityId && mongoose.Types.ObjectId.isValid(input.cityId) ? input.cityId : null;
+  const userIdValid = input.userId && mongoose.Types.ObjectId.isValid(input.userId) ? input.userId : undefined;
+
   // Resolve amount + names from the puja/city for the record and CRM deal.
   const [puja, city] = await Promise.all([
-    input.pujaId ? prisma.puja.findUnique({ where: { id: input.pujaId } }) : null,
-    input.cityId ? prisma.city.findUnique({ where: { id: input.cityId } }) : null,
+    pujaIdValid ? Puja.findById(pujaIdValid) : null,
+    cityIdValid ? City.findById(cityIdValid) : null,
   ]);
 
   const reference = await nextReference();
 
-  const booking = await prisma.booking.create({
-    data: {
-      reference,
-      serviceType: input.serviceType,
-      customerName: input.customerName,
-      customerEmail: input.customerEmail.toLowerCase(),
-      customerPhone: input.customerPhone,
-      notes: input.notes,
-      preferredDate: input.preferredDate,
-      preferredTime: input.preferredTime,
-      addressLine: input.addressLine,
-      pincode: input.pincode,
-      pujaId: puja?.id,
-      cityId: city?.id,
-      amount: puja?.basePrice ?? undefined,
-      currency: puja?.currency ?? 'INR',
-    },
-  });
+  const booking = await new Booking({
+    reference,
+    serviceType: input.serviceType,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail.toLowerCase(),
+    customerPhone: input.customerPhone,
+    notes: input.notes,
+    preferredDate: input.preferredDate,
+    preferredTime: input.preferredTime,
+    addressLine: input.addressLine,
+    pincode: input.pincode,
+    pujaId: puja?._id,
+    cityId: city?._id,
+    userId: userIdValid,
+    amount: (puja as any)?.basePrice ?? undefined,
+    currency: (puja as any)?.currency ?? 'INR',
+  }).save();
 
   // Mirror into Atomic CRM (non-blocking on failure).
   const crm = await syncBookingToCrm({
@@ -67,17 +74,17 @@ export async function createBooking(raw: unknown) {
     pujaName: puja?.name,
     cityName: city?.name,
     serviceType: booking.serviceType,
-    amount: puja?.basePrice ? Number(puja.basePrice) : null,
+    amount: (puja as any)?.basePrice ? Number((puja as any).basePrice) : null,
     currency: booking.currency,
     notes: booking.notes,
     preferredDate: booking.preferredDate,
   });
 
   if (crm) {
-    await prisma.booking.update({
-      where: { id: booking.id },
-      data: { crmContactId: crm.contactId, crmDealId: crm.dealId, crmSyncedAt: new Date() },
-    });
+    await Booking.updateOne(
+      { _id: booking._id },
+      { crmContactId: crm.contactId, crmDealId: crm.dealId, crmSyncedAt: new Date() }
+    );
   }
 
   return booking;

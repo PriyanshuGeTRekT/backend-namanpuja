@@ -1,33 +1,26 @@
 /**
- * Generic react-admin compatible CRUD router factory.
+ * Generic react-admin compatible CRUD router factory for Mongoose.
  *
  * Speaks the `ra-data-simple-rest` dialect:
  *   - GET    /        ?sort=["field","ASC"]&range=[0,24]&filter={...}
- *            → 200 [ ...rows ]  with header  Content-Range: <resource> 0-24/total
- *   - GET    /:id     → 200 row
- *   - POST   /        → 201 row
- *   - PUT    /:id     → 200 row
- *   - DELETE /:id     → 200 { id }
- *
- * All routes are mounted behind admin authentication.
+ *   - GET    /:id     
+ *   - POST   /        
+ *   - PUT    /:id     
+ *   - DELETE /:id     
  */
 import { Router, type Request, type Response } from 'express';
+import type { Model, Document } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 
 interface CrudOptions {
   resource: string;
-  /** Prisma model delegate, e.g. prisma.city */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  model: any;
-  /** Fields searched by the `q` filter (case-insensitive contains). */
+  model: Model<any>;
   searchableFields?: string[];
-  /** Relations to include on list/detail responses. */
-  include?: Record<string, unknown>;
-  /** Default ordering when none supplied. */
-  defaultOrderBy?: Record<string, 'asc' | 'desc'>;
-  /** Transform/validate the body before create/update. */
+  populate?: string[];
+  defaultOrderBy?: Record<string, 1 | -1>;
   beforeWrite?: (data: Record<string, unknown>, ctx: { isCreate: boolean }) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  afterWrite?: (doc: any, ctx: { isCreate: boolean }) => Promise<void> | void;
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -45,8 +38,8 @@ export function createCrudRouter(opts: CrudOptions): Router {
     resource,
     model,
     searchableFields = [],
-    include,
-    defaultOrderBy = { createdAt: 'desc' },
+    populate = [],
+    defaultOrderBy = { createdAt: -1 },
   } = opts;
 
   // LIST
@@ -58,36 +51,40 @@ export function createCrudRouter(opts: CrudOptions): Router {
       const filter = parseJson<Record<string, unknown>>(req.query.filter, {});
 
       const [start, end] = range;
-      const take = Math.max(0, end - start + 1);
+      const limit = Math.max(0, end - start + 1);
 
-      // Build where clause from filter
       const where: Record<string, unknown> = {};
-      const andClauses: unknown[] = [];
+      const orClauses: unknown[] = [];
 
       for (const [key, value] of Object.entries(filter)) {
         if (key === 'q') {
           if (searchableFields.length && value) {
-            andClauses.push({
-              OR: searchableFields.map((f) => ({
-                [f]: { contains: String(value), mode: 'insensitive' },
-              })),
-            });
+            orClauses.push(
+              ...searchableFields.map((f) => ({
+                [f]: { $regex: String(value), $options: 'i' },
+              }))
+            );
           }
         } else if (Array.isArray(value)) {
-          where[key] = { in: value };
+          where[key] = { $in: value };
         } else {
           where[key] = value;
         }
       }
-      if (andClauses.length) where.AND = andClauses;
+      if (orClauses.length) where.$or = orClauses;
 
       const orderBy = sort?.[0]
-        ? { [sort[0]]: (sort[1] || 'ASC').toLowerCase() as 'asc' | 'desc' }
+        ? { [sort[0]]: (sort[1] || 'ASC').toUpperCase() === 'ASC' ? 1 : -1 }
         : defaultOrderBy;
 
+      let query = model.find(where).sort(orderBy as any).skip(start).limit(limit);
+      for (const p of populate) {
+        query = query.populate(p);
+      }
+
       const [rows, total] = await Promise.all([
-        model.findMany({ where, orderBy, skip: start, take, include }),
-        model.count({ where }),
+        query.exec(),
+        model.countDocuments(where),
       ]);
 
       res.setHeader('Content-Range', `${resource} ${start}-${start + rows.length - 1}/${total}`);
@@ -100,7 +97,11 @@ export function createCrudRouter(opts: CrudOptions): Router {
   router.get(
     '/:id',
     asyncHandler(async (req: Request, res: Response) => {
-      const row = await model.findUnique({ where: { id: req.params.id }, include });
+      let query = model.findById(req.params.id);
+      for (const p of populate) {
+        query = query.populate(p);
+      }
+      const row = await query.exec();
       if (!row) throw ApiError.notFound(`${resource} not found`);
       res.json(row);
     }),
@@ -113,8 +114,16 @@ export function createCrudRouter(opts: CrudOptions): Router {
       let data = req.body as Record<string, unknown>;
       delete data.id;
       if (opts.beforeWrite) data = await opts.beforeWrite(data, { isCreate: true });
-      const row = await model.create({ data, include });
-      res.status(201).json(row);
+      const row = await new model(data).save();
+      
+      if (opts.afterWrite) await opts.afterWrite(row, { isCreate: true });
+      
+      let query = model.findById(row._id);
+      for (const p of populate) {
+        query = query.populate(p);
+      }
+      const populatedRow = await query.exec();
+      res.status(201).json(populatedRow);
     }),
   );
 
@@ -127,8 +136,17 @@ export function createCrudRouter(opts: CrudOptions): Router {
       delete data.createdAt;
       delete data.updatedAt;
       if (opts.beforeWrite) data = await opts.beforeWrite(data, { isCreate: false });
-      const row = await model.update({ where: { id: req.params.id }, data, include });
-      res.json(row);
+      const row = await model.findByIdAndUpdate(req.params.id, data, { new: true });
+      if (!row) throw ApiError.notFound(`${resource} not found`);
+      
+      if (opts.afterWrite) await opts.afterWrite(row, { isCreate: false });
+      
+      let query = model.findById(row._id);
+      for (const p of populate) {
+        query = query.populate(p);
+      }
+      const populatedRow = await query.exec();
+      res.json(populatedRow);
     }),
   );
 
@@ -136,7 +154,8 @@ export function createCrudRouter(opts: CrudOptions): Router {
   router.delete(
     '/:id',
     asyncHandler(async (req: Request, res: Response) => {
-      await model.delete({ where: { id: req.params.id } });
+      const row = await model.findByIdAndDelete(req.params.id);
+      if (!row) throw ApiError.notFound(`${resource} not found`);
       res.json({ id: req.params.id });
     }),
   );

@@ -9,11 +9,18 @@ export interface AuthPayload {
   role: string;
 }
 
+export interface UserAuthPayload {
+  sub: string;
+  email: string;
+  name: string;
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       admin?: AuthPayload;
+      user?: UserAuthPayload;
     }
   }
 }
@@ -41,4 +48,19 @@ export function requireRole(...roles: string[]) {
     }
     next();
   };
+}
+
+/** Requires a valid customer user JWT. */
+export function requireUserAuth(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    throw ApiError.unauthorized('Missing bearer token');
+  }
+  const token = header.slice(7);
+  try {
+    req.user = jwt.verify(token, env.jwtSecret) as UserAuthPayload;
+    next();
+  } catch {
+    throw ApiError.unauthorized('Invalid or expired token');
+  }
 }

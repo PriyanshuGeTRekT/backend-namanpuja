@@ -14,7 +14,8 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProd: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT ?? 4000),
-  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173')
+  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://127.0.0.1:27017/namanpuja',
+  corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://localhost:5174')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean),
