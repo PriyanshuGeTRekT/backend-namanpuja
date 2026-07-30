@@ -91,22 +91,56 @@ adminRouter.use(
     populate: ['category'],
     defaultOrderBy: { sortOrder: 1 },
     beforeWrite: async (data) => {
+      if (!data.name && data.title) {
+        data.name = data.title;
+      }
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
       
       if (data.bhaktiType === 'location' && data.country && data.city) {
         const countryName = String(data.country).trim();
         const cityName = String(data.city).trim();
-        const countrySlug = toSlug(countryName);
-        const citySlug = toSlug(cityName);
+        const countrySlug = data.countrySlug ? String(data.countrySlug).trim() : toSlug(countryName);
+        const citySlug = data.citySlug ? String(data.citySlug).trim() : toSlug(cityName);
 
-        let countryDoc = await Country.findOne({ slug: countrySlug });
+        let countryDoc = await Country.findOne({ $or: [{ slug: countrySlug }, { name: countryName }] });
         if (!countryDoc) {
-          countryDoc = await Country.create({ name: countryName, slug: countrySlug });
+          countryDoc = await Country.create({
+            name: countryName,
+            slug: countrySlug,
+            isoCode: String(data.countryIsoCode || ''),
+            flagEmoji: String(data.countryFlagEmoji || ''),
+            sortOrder: Number(data.countrySortOrder) || 0,
+          });
+        } else if (data.countryIsoCode || data.countryFlagEmoji || data.countrySortOrder !== undefined) {
+          const countryUpdates: Record<string, any> = {};
+          if (data.countryIsoCode) countryUpdates.isoCode = String(data.countryIsoCode);
+          if (data.countryFlagEmoji) countryUpdates.flagEmoji = String(data.countryFlagEmoji);
+          if (data.countrySortOrder !== undefined) countryUpdates.sortOrder = Number(data.countrySortOrder);
+
+          if (Object.keys(countryUpdates).length > 0) {
+            await Country.updateOne({ _id: countryDoc._id }, { $set: countryUpdates });
+          }
         }
 
-        let cityDoc = await City.findOne({ slug: citySlug, countryId: countryDoc._id });
+        let cityDoc = await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc._id });
         if (!cityDoc) {
-          await City.create({ name: cityName, slug: citySlug, countryId: countryDoc._id });
+          await City.create({
+            name: cityName,
+            slug: citySlug,
+            countryId: countryDoc._id,
+            state: String(data.cityState || ''),
+            isPopular: Boolean(data.cityIsPopular),
+            sortOrder: Number(data.citySortOrder) || 0,
+          });
+        } else if (data.cityState !== undefined || data.cityIsPopular !== undefined || data.citySortOrder !== undefined) {
+          const cityUpdates: Record<string, any> = {};
+          if (data.cityState !== undefined) cityUpdates.state = String(data.cityState);
+          if (data.cityIsPopular !== undefined) cityUpdates.isPopular = Boolean(data.cityIsPopular);
+          if (data.citySortOrder !== undefined) cityUpdates.sortOrder = Number(data.citySortOrder);
+
+          if (Object.keys(cityUpdates).length > 0) {
+            await City.updateOne({ _id: cityDoc._id }, { $set: cityUpdates });
+          }
         }
       }
       return data;
@@ -115,15 +149,16 @@ adminRouter.use(
       if (doc.bhaktiType === 'location' && doc.country && doc.city) {
         const cityName = String(doc.city).trim();
         const countryName = String(doc.country).trim();
-        const citySlug = toSlug(cityName);
-        const countrySlug = toSlug(countryName);
+        const citySlug = doc.citySlug ? String(doc.citySlug).trim() : toSlug(cityName);
+        const countrySlug = doc.countrySlug ? String(doc.countrySlug).trim() : toSlug(countryName);
 
         // Find the city (with its country) created in beforeWrite
-        const countryDoc = await Country.findOne({ slug: countrySlug });
-        const cityDoc = await City.findOne({ slug: citySlug, countryId: countryDoc?._id });
+        const countryDoc = await Country.findOne({ $or: [{ slug: countrySlug }, { name: countryName }] });
+        const cityDoc = await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc?._id });
         if (!cityDoc) return;
 
         const cityState = (cityDoc as any).state || '';
+        const targetPujaId = doc.targetPujaId || doc.pujaId || doc._id;
 
         // ── Convert content-builder blocks → sections ──
         const blocks: Array<{ type: string; value: any }> = Array.isArray(doc.blocks) ? doc.blocks : [];
@@ -147,7 +182,7 @@ adminRouter.use(
         }
 
         // ── Check for an existing PujaLocation ──
-        const existing = await PujaLocation.findOne({ pujaId: doc._id, cityId: cityDoc._id }).lean() as Record<string, any> | null;
+        const existing = await PujaLocation.findOne({ pujaId: targetPujaId, cityId: cityDoc._id }).lean() as Record<string, any> | null;
 
         // Helper: use the new custom puja value if non-empty, else fall back to existing
         const pick = <T,>(newVal: T | undefined | null, existingVal: T | undefined | null): T | undefined | null => {
@@ -159,15 +194,15 @@ adminRouter.use(
           return existingVal ?? undefined;
         };
 
-        const locSlug = pujaLocationSlug(doc.name, cityName, cityState);
+        const locSlug = pujaLocationSlug(doc.name || doc.title, cityName, cityState);
 
         const upsertData: Record<string, any> = {
-          pujaId: doc._id,
+          pujaId: targetPujaId,
           cityId: cityDoc._id,
           cityName,
           countryName,
           slug: existing?.slug || locSlug, // keep existing slug if it was already set
-          h1: `${doc.name} in ${cityName}`,
+          h1: `${doc.name || doc.title} in ${cityName}`,
           published: doc.status === 'published',
           intro: pick(doc.excerpt, existing?.intro),
 
@@ -182,7 +217,7 @@ adminRouter.use(
           ogImage: pick(firstImageUrl || doc.featuredImage, existing?.ogImage),
 
           // Auto-generated breadcrumb (only if none exists)
-          breadcrumb: existing?.breadcrumb || ['Home', countryName, cityName, doc.name],
+          breadcrumb: existing?.breadcrumb || ['Home', countryName, cityName, doc.name || doc.title],
 
           // Rich fields: PRESERVE existing data (no UI in custom puja form)
           benefits: existing?.benefits ?? undefined,
@@ -194,7 +229,7 @@ adminRouter.use(
           cta: existing?.cta ?? undefined,
           internalLinks: existing?.internalLinks ?? undefined,
           canonicalUrl: existing?.canonicalUrl ?? undefined,
-          imageAlt: pick(doc.title, existing?.imageAlt),
+          imageAlt: pick(doc.title || doc.name, existing?.imageAlt),
         };
 
         // Remove undefined keys so Mongo doesn't set them to null
@@ -203,7 +238,7 @@ adminRouter.use(
         }
 
         await PujaLocation.findOneAndUpdate(
-          { pujaId: doc._id, cityId: cityDoc._id },
+          { pujaId: targetPujaId, cityId: cityDoc._id },
           upsertData,
           { upsert: true, new: true },
         );
