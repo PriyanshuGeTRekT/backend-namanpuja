@@ -19,14 +19,21 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(morgan(env.isProd ? 'combined' : 'dev'));
 
-  app.use(
-    cors({
-      origin: env.corsOrigins.length ? env.corsOrigins : true,
-      exposedHeaders: ['Content-Range'],
-      credentials: true,
-    }),
-  );
-
+ app.use(
+  cors({
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'https://www.namanpuja.com',
+      'https://namanpuja.com',
+      '*'
+    ],
+    exposedHeaders: ['Content-Range'],
+    credentials: true,
+  }),
+);
   // Health check
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'backend-namanpuja' }));
 
