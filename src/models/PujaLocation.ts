@@ -10,7 +10,9 @@ const pujaLocationSchema = new mongoose.Schema(
     h1: { type: String },
     heroTagline: { type: String },
     intro: { type: String },
-    sections: { type: mongoose.Schema.Types.Mixed },
+    featuredImage: { type: String },     // uploaded hero image URL / base64
+    blocks: { type: mongoose.Schema.Types.Mixed },  // full Content Builder blocks array
+    sections: { type: mongoose.Schema.Types.Mixed }, // legacy heading+body pairs
     benefits: { type: mongoose.Schema.Types.Mixed },
     rituals: { type: mongoose.Schema.Types.Mixed },
     samagri: { type: mongoose.Schema.Types.Mixed },
@@ -31,7 +33,7 @@ const pujaLocationSchema = new mongoose.Schema(
     published: { type: Boolean, default: true },
     views: { type: Number, default: 0 },
   },
-  { timestamps: true },
+  { timestamps: true, strict: false },
 );
 
 pujaLocationSchema.virtual('puja', {

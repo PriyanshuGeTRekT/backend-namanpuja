@@ -106,7 +106,11 @@ publicRouter.get(
 
     PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
 
-    res.json(location);
+    const json = location.toJSON() as any;
+    if (json.pujaId) json.puja = json.pujaId;
+    if (json.cityId) json.city = json.cityId;
+
+    res.json(json);
   }),
 );
 

@@ -21,6 +21,8 @@ interface CrudOptions {
   defaultOrderBy?: Record<string, 1 | -1>;
   beforeWrite?: (data: Record<string, unknown>, ctx: { isCreate: boolean }) => Promise<Record<string, unknown>> | Record<string, unknown>;
   afterWrite?: (doc: any, ctx: { isCreate: boolean }) => Promise<void> | void;
+  /** Transform the raw doc before sending it back on GET ONE (for edit-form field-name remapping) */
+  getTransform?: (doc: Record<string, any>) => Record<string, any>;
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -87,9 +89,16 @@ export function createCrudRouter(opts: CrudOptions): Router {
         model.countDocuments(where),
       ]);
 
+      const transformedRows = opts.getTransform
+        ? rows.map((r) => {
+            const rawDoc = r.toJSON ? r.toJSON() : r;
+            return opts.getTransform!(rawDoc as Record<string, any>);
+          })
+        : rows;
+
       res.setHeader('Content-Range', `${resource} ${start}-${start + rows.length - 1}/${total}`);
       res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
-      res.json(rows);
+      res.json(transformedRows);
     }),
   );
 
@@ -103,7 +112,9 @@ export function createCrudRouter(opts: CrudOptions): Router {
       }
       const row = await query.exec();
       if (!row) throw ApiError.notFound(`${resource} not found`);
-      res.json(row);
+      const rawDoc = row.toJSON ? row.toJSON() : row;
+      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
+      res.json(result);
     }),
   );
 
@@ -123,7 +134,9 @@ export function createCrudRouter(opts: CrudOptions): Router {
         query = query.populate(p);
       }
       const populatedRow = await query.exec();
-      res.status(201).json(populatedRow);
+      const rawDoc = populatedRow?.toJSON ? populatedRow.toJSON() : populatedRow;
+      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
+      res.status(201).json(result);
     }),
   );
 
@@ -146,7 +159,9 @@ export function createCrudRouter(opts: CrudOptions): Router {
         query = query.populate(p);
       }
       const populatedRow = await query.exec();
-      res.json(populatedRow);
+      const rawDoc = populatedRow?.toJSON ? populatedRow.toJSON() : populatedRow;
+      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
+      res.json(result);
     }),
   );
 

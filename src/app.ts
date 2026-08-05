@@ -28,6 +28,7 @@ export function createApp() {
       'http://localhost:5174',
       'https://www.namanpuja.com',
       'https://namanpuja.com',
+      'https://namanpuja-backend.onrender.com/api',
       '*'
     ],
     exposedHeaders: ['Content-Range'],

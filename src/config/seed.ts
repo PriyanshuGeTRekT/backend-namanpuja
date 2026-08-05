@@ -35,10 +35,10 @@ export async function seedInitialData() {
       const oman = await Country.create({ name: 'Oman', slug: 'oman', enabled: true, sortOrder: 3 });
 
       // 3. Seed Cities (with State)
-      const delhi = await City.create({ countryId: india._id, name: 'Delhi', slug: 'delhi', state: 'Delhi', enabled: true, isPopular: true, sortOrder: 1 });
-      const mumbai = await City.create({ countryId: india._id, name: 'Mumbai', slug: 'mumbai', state: 'Maharashtra', enabled: true, isPopular: true, sortOrder: 2 });
-      const dubai = await City.create({ countryId: uae._id, name: 'Dubai', slug: 'dubai', state: 'Dubai', enabled: true, isPopular: true, sortOrder: 3 });
-      const muscat = await City.create({ countryId: oman._id, name: 'Muscat', slug: 'muscat', state: 'Muscat', enabled: true, isPopular: true, sortOrder: 4 });
+      const delhi = await City.create({ countryId: india._id, name: 'Delhi', slug: 'delhi', state: 'Delhi', geoRegion: 'IN-DL', latitude: 28.6139, longitude: 77.2090, enabled: true, isPopular: true, sortOrder: 1 });
+      const mumbai = await City.create({ countryId: india._id, name: 'Mumbai', slug: 'mumbai', state: 'Maharashtra', geoRegion: 'IN-MH', latitude: 19.0760, longitude: 72.8777, enabled: true, isPopular: true, sortOrder: 2 });
+      const dubai = await City.create({ countryId: uae._id, name: 'Dubai', slug: 'dubai', state: 'Dubai', geoRegion: 'AE-DU', latitude: 25.2048, longitude: 55.2708, enabled: true, isPopular: true, sortOrder: 3 });
+      const muscat = await City.create({ countryId: oman._id, name: 'Muscat', slug: 'muscat', state: 'Muscat', geoRegion: 'OM-MA', latitude: 23.5880, longitude: 58.3829, enabled: true, isPopular: true, sortOrder: 4 });
 
       // 4. Seed Puja Category
       const vedicCategory = await PujaCategory.create({
