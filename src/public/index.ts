@@ -206,13 +206,18 @@ publicRouter.post(
     if (!email || !password) {
       throw ApiError.badRequest('Email and password are required');
     }
+console.log('Login:', email);
 
     const user = await User.findOne({ email: email.toLowerCase() });
+    console.log('User found:', !!user);
+
     if (!user) {
       throw ApiError.unauthorized('Invalid email or password');
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
+      console.log('Password match:', isMatch);
+
     if (!isMatch) {
       throw ApiError.unauthorized('Invalid email or password');
     }
