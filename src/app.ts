@@ -54,6 +54,7 @@ export function createApp() {
     'https://www.namanpuja.com',
     'https://namanpuja.com',
     'https://naman-puja-admin-panel-tr63876wc-naman-puja.vercel.app',
+    'https://naman-puja-admin-panel.vercel.app/'
   ];
 
   // Vercel gives every preview deployment a random-suffix subdomain, e.g.:
