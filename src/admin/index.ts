@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { createCrudRouter } from './crudFactory.js';
 import { authRouter } from './auth.routes.js';
 import { toSlug, pujaLocationSlug } from '../utils/slug.js';
+import { generateAndSaveSitemap } from '../utils/sitemap.js';
 
 import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
@@ -77,6 +78,12 @@ adminRouter.use(
     defaultOrderBy: { sortOrder: 1 },
     beforeWrite: (data) => {
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
+      if (data.categoryId === '' || data.categoryId === null) {
+        delete data.categoryId;
+      }
+      if (data.basePrice !== undefined && data.basePrice !== '') {
+        data.basePrice = Number(data.basePrice);
+      }
       return data;
     },
   }),
@@ -100,6 +107,9 @@ adminRouter.use(
         data.basePrice = Number(data.basePrice);
       } else {
         data.basePrice = 0;
+      }
+      if (data.categoryId === '' || data.categoryId === null) {
+        delete data.categoryId;
       }
       
       if (data.bhaktiType === 'location' && data.country && data.city) {
@@ -277,6 +287,7 @@ adminRouter.use(
           { upsert: true, new: true },
         );
       }
+      await generateAndSaveSitemap();
     }
   }),
 );
@@ -312,6 +323,9 @@ adminRouter.use(
         }
       }
       return data;
+    },
+    afterWrite: async () => {
+      await generateAndSaveSitemap();
     },
   }),
 );

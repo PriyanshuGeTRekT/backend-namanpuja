@@ -40,8 +40,8 @@ export function createApp() {
     next();
   });
   app.use(compression());
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   app.use(morgan(env.isProd ? 'combined' : 'dev'));
 
   // --- CORS ---
@@ -53,15 +53,13 @@ export function createApp() {
     'http://localhost:5174',
     'https://www.namanpuja.com',
     'https://namanpuja.com',
+    'https://naman-puja-admin-panel.vercel.app',
     'https://naman-puja-admin-panel-tr63876wc-naman-puja.vercel.app',
-    'https://naman-puja-admin-panel.vercel.app/'
+    ...env.corsOrigins.map((o) => o.replace(/\/$/, '')),
   ];
 
-  // Vercel gives every preview deployment a random-suffix subdomain, e.g.:
-  //   naman-puja-admin-panel-tr63876wc-naman-puja.vercel.app
-  //   naman-puja-admin-panel-w8uj8vrv4-naman-puja.vercel.app
-  // A static list can never keep up with these, so match the pattern instead.
-  const vercelPreviewPattern = /^https:\/\/naman-puja-admin-panel(-[a-z0-9]+)?-naman-puja\.vercel\.app$/;
+  // Match any Vercel preview or production deployment for our admin/frontend apps
+  const vercelPreviewPattern = /^https:\/\/([a-z0-9-]+\.)?vercel\.app$/;
 
   app.use(
     cors({
@@ -69,7 +67,9 @@ export function createApp() {
         // No origin header = same-origin request, server-to-server call, curl, etc. — allow.
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.includes(origin) || vercelPreviewPattern.test(origin)) {
+        const cleanOrigin = origin.replace(/\/$/, '');
+
+        if (allowedOrigins.includes(cleanOrigin) || vercelPreviewPattern.test(cleanOrigin)) {
           return callback(null, true);
         }
 

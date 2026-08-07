@@ -36,13 +36,28 @@ export async function createBooking(raw: unknown) {
   const input = bookingSchema.parse(raw);
 
   const pujaIdValid = input.pujaId && mongoose.Types.ObjectId.isValid(input.pujaId) ? input.pujaId : null;
-  const cityIdValid = input.cityId && mongoose.Types.ObjectId.isValid(input.cityId) ? input.cityId : null;
+  
+  let cityDoc = null;
+  if (input.cityId) {
+    if (mongoose.Types.ObjectId.isValid(input.cityId)) {
+      cityDoc = await City.findById(input.cityId);
+    }
+    if (!cityDoc) {
+      cityDoc = await City.findOne({
+        $or: [
+          { slug: String(input.cityId).toLowerCase().trim().replace(/\s+/g, '-') },
+          { name: new RegExp(`^${input.cityId}$`, 'i') },
+        ],
+      });
+    }
+  }
+
   const userIdValid = input.userId && mongoose.Types.ObjectId.isValid(input.userId) ? input.userId : undefined;
 
   // Resolve amount + names from the puja/city for the record and CRM deal.
   const [puja, city] = await Promise.all([
     pujaIdValid ? Puja.findById(pujaIdValid) : null,
-    cityIdValid ? City.findById(cityIdValid) : null,
+    Promise.resolve(cityDoc),
   ]);
 
   const reference = await nextReference();

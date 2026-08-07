@@ -25,6 +25,35 @@ export async function seedInitialData() {
       });
       // eslint-disable-next-line no-console
       console.log(`👤 Default admin created: ${adminEmail}`);
+    } else {
+      const passwordHash = await bcrypt.hash(env.seedAdmin.password, 10);
+      existingAdmin.name = 'Naman Puja Admin';
+      existingAdmin.passwordHash = passwordHash;
+      await existingAdmin.save();
+      // eslint-disable-next-line no-console
+      console.log(`👤 Default admin updated/synced: ${adminEmail}`);
+    }
+
+    // 1b. Seed Second Admin User
+    const secondAdminEmail = 'namanpuja@admin.com';
+    const existingSecondAdmin = await AdminUser.findOne({ email: secondAdminEmail });
+    if (!existingSecondAdmin) {
+      const passwordHash = await bcrypt.hash('AdminUser@321', 10);
+      await AdminUser.create({
+        email: secondAdminEmail,
+        passwordHash,
+        name: 'Admin User',
+        role: 'ADMIN',
+      });
+      // eslint-disable-next-line no-console
+      console.log(`👤 Second admin created: ${secondAdminEmail}`);
+    } else {
+      const passwordHash = await bcrypt.hash('AdminUser@321', 10);
+      existingSecondAdmin.name = 'Admin User';
+      existingSecondAdmin.passwordHash = passwordHash;
+      await existingSecondAdmin.save();
+      // eslint-disable-next-line no-console
+      console.log(`👤 Second admin updated/synced: ${secondAdminEmail}`);
     }
 
     // 2. Seed Country if empty

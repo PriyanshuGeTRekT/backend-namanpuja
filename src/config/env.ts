@@ -17,7 +17,7 @@ export const env = {
   mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://127.0.0.1:27017/namanpuja',
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:5173,http://localhost:5174')
     .split(',')
-    .map((o) => o.trim())
+    .map((o) => o.trim().replace(/\/$/, ''))
     .filter(Boolean),
 
   jwtSecret: required('JWT_SECRET', 'dev-insecure-secret-change-me'),
