@@ -59,7 +59,7 @@ export function createApp() {
   ];
 
   // Match any Vercel preview or production deployment for our admin/frontend apps
-  const vercelPreviewPattern = /^https:\/\/([a-z0-9-]+\.)?vercel\.app$/;
+  const vercelPreviewPattern = /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/;
 
   app.use(
     cors({

@@ -6,6 +6,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { requireUserAuth } from '../middleware/auth.js';
 import { createBooking } from '../bookings/createBooking.js';
+import { paymentRouter } from '../routes/razourpayment.js';
 
 import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
@@ -157,6 +158,8 @@ publicRouter.post(
     });
   }),
 );
+
+publicRouter.use('/payment', paymentRouter);
 
 
 publicRouter.post(
