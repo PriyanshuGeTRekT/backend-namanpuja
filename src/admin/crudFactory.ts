@@ -9,7 +9,7 @@
  *   - DELETE /:id     
  */
 import { Router, type Request, type Response } from 'express';
-import type { Model, Document } from 'mongoose';
+import type { Model } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 
@@ -19,6 +19,7 @@ interface CrudOptions {
   searchableFields?: string[];
   populate?: string[];
   defaultOrderBy?: Record<string, 1 | -1>;
+  baseFilter?: Record<string, unknown>;
   beforeWrite?: (data: Record<string, unknown>, ctx: { isCreate: boolean }) => Promise<Record<string, unknown>> | Record<string, unknown>;
   afterWrite?: (doc: any, ctx: { isCreate: boolean }) => Promise<void> | void;
   /** Transform the raw doc before sending it back on GET ONE (for edit-form field-name remapping) */
@@ -42,6 +43,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
     searchableFields = [],
     populate = [],
     defaultOrderBy = { createdAt: -1 },
+    baseFilter = {},
   } = opts;
 
   // LIST
@@ -55,7 +57,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
       const [start, end] = range;
       const limit = Math.max(0, end - start + 1);
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = Object.keys(baseFilter).length > 0 ? { ...baseFilter } : {};
       const orClauses: unknown[] = [];
 
       for (const [key, value] of Object.entries(filter)) {
@@ -73,7 +75,14 @@ export function createCrudRouter(opts: CrudOptions): Router {
           where[key] = value;
         }
       }
-      if (orClauses.length) where.$or = orClauses;
+      if (orClauses.length) {
+        if (where.$or) {
+          where.$and = [{ $or: where.$or }, { $or: orClauses }];
+          delete where.$or;
+        } else {
+          where.$or = orClauses;
+        }
+      }
 
       const orderBy = sort?.[0]
         ? { [sort[0]]: (sort[1] || 'ASC').toUpperCase() === 'ASC' ? 1 : -1 }

@@ -17,6 +17,7 @@ const bookingSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     amount: { type: Number },
     currency: { type: String, default: 'INR' },
+    paymentId: { type: String },
     crmContactId: { type: String },
     crmDealId: { type: String },
     crmSyncedAt: { type: Date },

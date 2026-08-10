@@ -16,6 +16,7 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { Temple } from '../models/Temple.js';
 import { Booking } from '../models/Booking.js';
+import { User } from '../models/User.js';
 
 export const adminRouter = Router();
 
@@ -24,6 +25,40 @@ adminRouter.use('/auth', authRouter);
 
 // Everything below requires authentication
 adminRouter.use(requireAuth);
+
+// 1. Registered Users Section
+adminRouter.use(
+  '/users',
+  createCrudRouter({
+    resource: 'users',
+    model: User,
+    searchableFields: ['name', 'email', 'phone'],
+  }),
+);
+
+// 2. Form Submissions from /book (No payment ID yet)
+adminRouter.use(
+  '/form-submissions',
+  createCrudRouter({
+    resource: 'form-submissions',
+    model: Booking,
+    searchableFields: ['reference', 'customerName', 'customerEmail', 'customerPhone'],
+    populate: ['puja', 'city', 'user'],
+    baseFilter: { $or: [{ paymentId: { $exists: false } }, { paymentId: null }, { paymentId: '' }] },
+  }),
+);
+
+// 3. Paid Bookings / Payments (Completed payment)
+adminRouter.use(
+  '/paid-bookings',
+  createCrudRouter({
+    resource: 'paid-bookings',
+    model: Booking,
+    searchableFields: ['reference', 'customerName', 'customerEmail', 'customerPhone', 'paymentId'],
+    populate: ['puja', 'city', 'user'],
+    baseFilter: { paymentId: { $exists: true, $nin: [null, ''] } },
+  }),
+);
 
 adminRouter.use(
   '/countries',
@@ -97,7 +132,6 @@ adminRouter.use(
     searchableFields: ['name', 'slug', 'deity', 'title', 'bhaktiType', 'country', 'city'],
     populate: ['category'],
     defaultOrderBy: { sortOrder: 1 },
-    // Map form field names → model field names before saving
     beforeWrite: async (data) => {
       if (!data.name && data.title) {
         data.name = data.title;
@@ -147,7 +181,7 @@ adminRouter.use(
             state: String(data.cityState || data.state || ''),
             geoRegion: String(data.cityGeoRegion || data.geoRegion || ''),
             latitude: data.cityLatitude !== undefined && data.cityLatitude !== '' ? Number(data.cityLatitude) : (data.latitude !== undefined && data.latitude !== '' ? Number(data.latitude) : undefined),
-            longitude: data.cityLongitude !== undefined && data.cityLongitude !== '' ? Number(data.cityLongitude) : (data.longitude !== undefined && data.longitude !== '' ? Number(data.longitude) : undefined),
+            longitude: data.cityLongitude !== undefined && data.cityLongitude !== '' ? Number(data.cityLongitude) : (data.latitude !== undefined && data.latitude !== '' ? Number(data.latitude) : undefined),
             isPopular: Boolean(data.cityIsPopular || data.isPopular),
             sortOrder: Number(data.citySortOrder || data.sortOrder) || 0,
           });
@@ -156,7 +190,7 @@ adminRouter.use(
           if (data.cityState !== undefined || data.state !== undefined) cityUpdates.state = String(data.cityState ?? data.state);
           if (data.cityGeoRegion !== undefined || data.geoRegion !== undefined) cityUpdates.geoRegion = String(data.cityGeoRegion ?? data.geoRegion);
           if (data.cityLatitude !== undefined || data.latitude !== undefined) cityUpdates.latitude = Number(data.cityLatitude ?? data.latitude);
-          if (data.cityLongitude !== undefined || data.latitude !== undefined) cityUpdates.longitude = Number(data.cityLongitude ?? data.longitude);
+          if (data.cityLongitude !== undefined || data.latitude !== undefined) cityUpdates.longitude = Number(data.cityLongitude ?? data.latitude);
           if (data.cityIsPopular !== undefined || data.isPopular !== undefined) cityUpdates.isPopular = Boolean(data.cityIsPopular ?? data.isPopular);
           if (data.citySortOrder !== undefined || data.sortOrder !== undefined) cityUpdates.sortOrder = Number(data.citySortOrder ?? data.sortOrder);
 
@@ -167,29 +201,23 @@ adminRouter.use(
       }
       return data;
     },
-    // Map model field names → form field names when loading for edit
     getTransform: (doc: Record<string, any>) => ({
       ...doc,
-      // The form uses 'title' but model saves as 'name'
       title: doc.title ?? doc.name,
-      // The form uses 'excerpt' but model may save as 'excerpt' or 'shortDesc'
       excerpt: doc.excerpt ?? doc.shortDesc ?? doc.shortDescription ?? '',
       basePrice: doc.basePrice ?? 0,
-      // SEO field name mapping
       seoTitle: doc.seoTitle ?? doc.metaTitle ?? '',
       seoDescription: doc.seoDescription ?? doc.metaDescription ?? '',
       seoKeywords: doc.seoKeywords ?? doc.keywords ?? [],
-      // blocks must be an array for useFieldArray
       blocks: Array.isArray(doc.blocks) ? doc.blocks : [],
     }),
-    afterWrite: async (doc, ctx) => {
+    afterWrite: async (doc, _ctx) => {
       if (doc.bhaktiType === 'location' && doc.country && doc.city) {
         const cityName = String(doc.city).trim();
         const countryName = String(doc.country).trim();
         const citySlug = doc.citySlug ? String(doc.citySlug).trim() : toSlug(cityName);
         const countrySlug = doc.countrySlug ? String(doc.countrySlug).trim() : toSlug(countryName);
 
-        // Find the city (with its country) created in beforeWrite
         const countryDoc = await Country.findOne({ $or: [{ slug: countrySlug }, { name: countryName }] });
         const cityDoc = await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc?._id });
         if (!cityDoc) return;
@@ -197,10 +225,8 @@ adminRouter.use(
         const cityState = (cityDoc as any).state || '';
         const targetPujaId = doc.targetPujaId || doc.pujaId || doc._id;
 
-        // ── Full blocks array — preserve all block types ──
         const blocks: Array<{ type: string; value: any; bgColor?: string }> = Array.isArray(doc.blocks) ? doc.blocks : [];
         
-        // Build legacy sections (heading+body) for backwards compat
         const sections: Array<{ heading: string; body: string }> = [];
         let firstImageUrl = '';
         for (let i = 0; i < blocks.length; i++) {
@@ -218,10 +244,8 @@ adminRouter.use(
           }
         }
 
-        // ── Check for an existing PujaLocation ──
         const existing = await PujaLocation.findOne({ pujaId: targetPujaId, cityId: cityDoc._id }).lean() as Record<string, any> | null;
 
-        // Helper: use the new custom puja value if non-empty, else fall back to existing
         const pick = <T,>(newVal: T | undefined | null, existingVal: T | undefined | null): T | undefined | null => {
           if (newVal !== undefined && newVal !== null && newVal !== '') return newVal;
           return existingVal ?? null;
@@ -238,45 +262,23 @@ adminRouter.use(
           cityId: cityDoc._id,
           cityName,
           countryName,
-          slug: existing?.slug || locSlug, // keep existing slug if it was already set
+          slug: existing?.slug || locSlug,
           h1: `${doc.name || doc.title} in ${cityName}`,
           published: doc.status === 'published',
           basePrice: doc.basePrice !== undefined && doc.basePrice !== '' ? Number(doc.basePrice) : (existing?.basePrice ?? 0),
           intro: pick(doc.excerpt, existing?.intro),
-
-          // ── Full blocks array — ALWAYS overwrite with submitted blocks ──
           blocks: Array.isArray(doc.blocks) ? doc.blocks : (existing?.blocks ?? []),
-
-          // Legacy sections for older fallback paths — updated to match current blocks
           sections: sections,
-
-          // Featured image from form upload field
           featuredImage: doc.featuredImage ?? existing?.featuredImage ?? '',
           faqs: doc.faqs && doc.faqs.length ? doc.faqs : (existing?.faqs ?? []),
-
-          // SEO
           metaTitle: pick(doc.seoTitle, existing?.metaTitle),
           metaDescription: pick(doc.seoDescription, existing?.metaDescription),
           keywords: pickArray(doc.seoKeywords, existing?.keywords),
           ogImage: firstImageUrl || doc.featuredImage || existing?.ogImage || '',
-
-          // Auto-generated breadcrumb (only if none exists)
           breadcrumb: existing?.breadcrumb || ['Home', countryName, cityName, doc.name || doc.title],
-
-          // Rich fields: PRESERVE existing data (no UI in custom puja form)
-          benefits: existing?.benefits ?? undefined,
-          rituals: existing?.rituals ?? undefined,
-          samagri: existing?.samagri ?? undefined,
-          whyChooseUs: existing?.whyChooseUs ?? undefined,
-          occasions: existing?.occasions ?? undefined,
-          serviceAreas: existing?.serviceAreas ?? undefined,
-          cta: existing?.cta ?? undefined,
-          internalLinks: existing?.internalLinks ?? undefined,
-          canonicalUrl: existing?.canonicalUrl ?? undefined,
           imageAlt: pick(doc.title || doc.name, existing?.imageAlt),
         };
 
-        // Remove undefined keys so Mongo doesn't set them to null
         for (const key of Object.keys(upsertData)) {
           if (upsertData[key] === undefined) delete upsertData[key];
         }
@@ -298,9 +300,8 @@ adminRouter.use(
     resource: 'puja-locations',
     model: PujaLocation,
     searchableFields: ['slug', 'h1', 'metaTitle', 'cityName', 'countryName'],
-    populate: ['puja', 'city'], // Note: deeply populating city.country usually requires a specific object in mongoose, but this is simple array syntax. For simple admin it works.
+    populate: ['puja', 'city'],
     beforeWrite: async (data) => {
-      // Auto-build slug + h1 from puja + city when missing
       if ((!data.slug || !data.h1) && data.pujaId) {
         const puja = await Puja.findById(data.pujaId);
         
@@ -350,7 +351,7 @@ adminRouter.use(
   createCrudRouter({
     resource: 'bookings',
     model: Booking,
-    searchableFields: ['reference', 'customerName', 'customerEmail', 'customerPhone'],
-    populate: ['puja', 'city'],
+    searchableFields: ['reference', 'customerName', 'customerEmail', 'customerPhone', 'paymentId'],
+    populate: ['puja', 'city', 'user'],
   }),
 );

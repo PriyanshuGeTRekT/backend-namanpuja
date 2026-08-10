@@ -18,6 +18,7 @@ const bookingSchema = z.object({
   pujaId: z.string().optional(),
   cityId: z.string().optional(),
   userId: z.string().optional(),
+  paymentId: z.string().optional(),
 });
 
 export type BookingInput = z.infer<typeof bookingSchema>;
@@ -76,8 +77,10 @@ export async function createBooking(raw: unknown) {
     pujaId: puja?._id,
     cityId: city?._id,
     userId: userIdValid,
+    paymentId: input.paymentId,
     amount: (puja as any)?.basePrice ?? undefined,
     currency: (puja as any)?.currency ?? 'INR',
+    status: input.paymentId ? 'CONFIRMED' : 'PENDING',
   }).save();
 
   // Mirror into Atomic CRM (non-blocking on failure).
