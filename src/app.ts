@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { publicRouter } from './public/index.js';
 import { adminRouter } from './admin/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { buildSitemapXml } from './utils/sitemap.js';
 
 export function createApp() {
   const app = express();
@@ -90,6 +91,17 @@ export function createApp() {
   // Admin API (stricter limiter on the auth surface handled within)
   const adminLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
   app.use('/api/admin', adminLimiter, adminRouter);
+
+  // Sitemap route at the root level before 404/catch-all handlers
+  app.get('/sitemap.xml', async (_req, res) => {
+    try {
+      const xml = await buildSitemapXml();
+      res.header('Content-Type', 'application/xml');
+      res.send(xml);
+    } catch (err) {
+      res.status(500).send('Error generating sitemap');
+    }
+  });
 
   app.use(notFoundHandler);
   app.use(errorHandler);

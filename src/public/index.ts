@@ -14,8 +14,18 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { Temple } from '../models/Temple.js';
 import { User } from '../models/User.js';
+import { buildSitemapXml } from '../utils/sitemap.js';
 
 export const publicRouter = Router();
+
+publicRouter.get(
+  '/sitemap.xml',
+  asyncHandler(async (_req, res: Response) => {
+    const xml = await buildSitemapXml();
+    res.header('Content-Type', 'application/xml');
+    res.send(xml);
+  }),
+);
 
 
 publicRouter.get(
