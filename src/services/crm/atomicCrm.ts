@@ -38,6 +38,8 @@ export interface BookingForCrm {
   currency?: string;
   notes?: string | null;
   preferredDate?: Date | null;
+  paymentId?: string | null;
+  isPaid?: boolean;
 }
 
 function crmHeaders(): Record<string, string> {
@@ -116,6 +118,37 @@ export async function syncBookingToCrm(
       sales_id: env.crm.defaultSalesId,
       index: 0,
     });
+
+    if (booking.isPaid || booking.paymentId) {
+      await crmPost('paid_bookings', {
+        reference: booking.reference,
+        customer_name: booking.customerName,
+        customer_email: booking.customerEmail,
+        customer_phone: booking.customerPhone,
+        service_type: booking.serviceType,
+        puja_name: booking.pujaName,
+        city_name: booking.cityName,
+        amount: booking.amount,
+        currency: booking.currency ?? 'INR',
+        payment_id: booking.paymentId,
+        notes: booking.notes,
+        preferred_date: booking.preferredDate,
+        status: 'PAID',
+      }).catch(() => {});
+    } else {
+      await crmPost('form_submissions', {
+        reference: booking.reference,
+        customer_name: booking.customerName,
+        customer_email: booking.customerEmail,
+        customer_phone: booking.customerPhone,
+        service_type: booking.serviceType,
+        puja_name: booking.pujaName,
+        city_name: booking.cityName,
+        notes: booking.notes,
+        preferred_date: booking.preferredDate,
+        status: 'SUBMITTED',
+      }).catch(() => {});
+    }
 
     return { contactId: contact.id, dealId: deal.id };
   } catch (err) {

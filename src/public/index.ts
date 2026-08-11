@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { requireUserAuth } from '../middleware/auth.js';
-import { createBooking } from '../bookings/createBooking.js';
+import { createFormSubmission } from '../bookings/createFormSubmission.js';
 import { paymentRouter } from '../routes/razourpayment.js';
 
 import { Country } from '../models/Country.js';
@@ -160,10 +160,10 @@ publicRouter.get(
 publicRouter.post(
   '/bookings',
   asyncHandler(async (req: Request, res: Response) => {
-    const booking = await createBooking(req.body);
+    const submission = await createFormSubmission(req.body);
     res.status(201).json({
-      reference: booking.reference,
-      status: booking.status,
+      reference: submission.reference,
+      status: submission.status,
       message: 'Your booking request has been received. Our team will contact you shortly.',
     });
   }),
