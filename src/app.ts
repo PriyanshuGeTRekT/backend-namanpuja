@@ -87,6 +87,7 @@ export function createApp() {
   // Public API (rate-limited)
   const publicLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true });
   app.use('/api', publicLimiter, publicRouter);
+  app.use('/', publicLimiter, publicRouter);
 
   // Admin API (stricter limiter on the auth surface handled within)
   const adminLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
