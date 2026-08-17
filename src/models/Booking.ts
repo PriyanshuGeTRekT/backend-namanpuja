@@ -26,6 +26,10 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+bookingSchema.index({ reference: 1 });
+bookingSchema.index({ paymentId: 1 });
+bookingSchema.index({ userId: 1, createdAt: -1 });
+
 bookingSchema.virtual('user', {
   ref: 'User',
   localField: 'userId',

@@ -12,6 +12,9 @@ const countrySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+countrySchema.index({ slug: 1 });
+countrySchema.index({ enabled: 1, sortOrder: 1 });
+
 countrySchema.set('toJSON', {
   virtuals: true,
   versionKey: false,

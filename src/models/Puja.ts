@@ -23,9 +23,15 @@ const pujaSchema = new mongoose.Schema(
     enabled: { type: Boolean, default: true },
     isFeatured: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0 },
+    bhaktiType: { type: String, default: 'main' },
   },
   { timestamps: true, strict: false },
 );
+
+pujaSchema.index({ slug: 1 });
+pujaSchema.index({ enabled: 1, isFeatured: 1, sortOrder: 1 });
+pujaSchema.index({ categoryId: 1 });
+pujaSchema.index({ enabled: 1, bhaktiType: 1, isFeatured: -1, sortOrder: 1 });
 
 pujaSchema.virtual('category', {
   ref: 'PujaCategory',

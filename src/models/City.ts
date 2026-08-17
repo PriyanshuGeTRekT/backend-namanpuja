@@ -16,6 +16,10 @@ const citySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+citySchema.index({ slug: 1 });
+citySchema.index({ countryId: 1, enabled: 1 });
+citySchema.index({ enabled: 1, isPopular: -1, sortOrder: 1, name: 1 });
+
 citySchema.virtual('country', {
   ref: 'Country',
   localField: 'countryId',

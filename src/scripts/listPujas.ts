@@ -3,9 +3,10 @@
  * Run: npx tsx --env-file=.env src/scripts/listPujas.ts
  */
 import mongoose from 'mongoose';
+import { env } from '../config/env.js';
 import { Puja } from '../models/Puja.js';
 
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/namanpuja';
+const MONGO_URI = env.mongoUri;
 
 async function main() {
   await mongoose.connect(MONGO_URI);

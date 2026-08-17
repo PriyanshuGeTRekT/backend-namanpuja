@@ -19,6 +19,10 @@ const templeSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+templeSchema.index({ slug: 1 });
+templeSchema.index({ cityId: 1, enabled: 1 });
+templeSchema.index({ enabled: 1, isFeatured: -1, sortOrder: 1 });
+
 templeSchema.virtual('city', {
   ref: 'City',
   localField: 'cityId',

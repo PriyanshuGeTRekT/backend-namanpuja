@@ -5,9 +5,9 @@ import { PujaLocation } from '../models/PujaLocation.js';
 import { City } from '../models/City.js';
 
 export async function buildSitemapXml(): Promise<string> {
-  const pujas = await Puja.find({}).lean();
-  const locations = await PujaLocation.find({}).lean();
-  const cities = await City.find({}).lean();
+  const pujas = await Puja.find({}).select('slug updatedAt').lean();
+  const locations = await PujaLocation.find({}).select('slug updatedAt').lean();
+  const cities = await City.find({}).select('slug updatedAt').lean();
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -16,36 +16,33 @@ export async function buildSitemapXml(): Promise<string> {
   // Static pages
   const staticUrls = [
     { loc: 'https://www.namanpuja.com/', priority: '1.0', changefreq: 'weekly' },
-    { loc: 'https://www.namanpuja.com/book/', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/pujas/mainpuja/', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/mainlocation/', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/login/', priority: '0.3', changefreq: 'yearly' },
-    { loc: 'https://www.namanpuja.com/register/', priority: '0.3', changefreq: 'yearly' },
+    { loc: 'https://www.namanpuja.com/book', priority: '0.8', changefreq: 'monthly' },
+    { loc: 'https://www.namanpuja.com/pujas/mainpuja', priority: '0.8', changefreq: 'monthly' },
+    { loc: 'https://www.namanpuja.com/mainlocation', priority: '0.8', changefreq: 'monthly' },
+    { loc: 'https://www.namanpuja.com/login', priority: '0.3', changefreq: 'yearly' },
+    { loc: 'https://www.namanpuja.com/register', priority: '0.3', changefreq: 'yearly' },
   ];
 
   for (const u of staticUrls) {
     xml += `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>\n`;
   }
 
-  // Pujas (/pujas/:slug/)
+  // Pujas (/pujas/:slug)
   for (const p of pujas) {
     if (!p.slug) continue;
-    const slug = p.slug.endsWith('/') ? p.slug : `${p.slug}/`;
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/pujas/${slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+    xml += `  <url>\n    <loc>https://www.namanpuja.com/pujas/${p.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
   }
 
-  // Cities (/city/:slug/)
+  // Cities (/city/:slug)
   for (const c of cities) {
     if (!c.slug) continue;
-    const slug = c.slug.endsWith('/') ? c.slug : `${c.slug}/`;
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/city/${slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+    xml += `  <url>\n    <loc>https://www.namanpuja.com/city/${c.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
   }
 
-  // Locations (/locations/:slug/)
+  // Locations (/locations/:slug)
   for (const l of locations) {
     if (!l.slug) continue;
-    const slug = l.slug.endsWith('/') ? l.slug : `${l.slug}/`;
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/locations/${slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+    xml += `  <url>\n    <loc>https://www.namanpuja.com/locations/${l.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
   }
 
   xml += `</urlset>\n`;

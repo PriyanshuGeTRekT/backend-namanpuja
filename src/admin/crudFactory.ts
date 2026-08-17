@@ -35,6 +35,18 @@ function parseJson<T>(value: unknown, fallback: T): T {
   }
 }
 
+function serializeDoc(doc: any, getTransform?: (d: Record<string, any>) => Record<string, any>) {
+  if (!doc) return doc;
+  const raw = typeof doc.toJSON === 'function' 
+    ? doc.toJSON({ virtuals: true }) 
+    : (typeof doc.toObject === 'function' ? doc.toObject({ virtuals: true }) : { ...doc });
+  
+  if (raw && raw._id && !raw.id) {
+    raw.id = raw._id.toString();
+  }
+  return getTransform ? getTransform(raw) : raw;
+}
+
 export function createCrudRouter(opts: CrudOptions): Router {
   const router = Router();
   const {
@@ -88,7 +100,10 @@ export function createCrudRouter(opts: CrudOptions): Router {
         ? { [sort[0]]: (sort[1] || 'ASC').toUpperCase() === 'ASC' ? 1 : -1 }
         : defaultOrderBy;
 
-      let query = model.find(where).sort(orderBy as any).skip(start).limit(limit);
+      let query = model.find(where).sort(orderBy as any).skip(start).limit(limit).lean();
+      if (resource === 'pujas' || resource === 'puja-pages') {
+        query = query.select('-blocks -description -benefits -rituals -samagri');
+      }
       for (const p of populate) {
         query = query.populate(p);
       }
@@ -98,12 +113,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
         model.countDocuments(where),
       ]);
 
-      const transformedRows = opts.getTransform
-        ? rows.map((r) => {
-            const rawDoc = r.toJSON ? r.toJSON() : r;
-            return opts.getTransform!(rawDoc as Record<string, any>);
-          })
-        : rows;
+      const transformedRows = rows.map((r) => serializeDoc(r, opts.getTransform));
 
       res.setHeader('Content-Range', `${resource} ${start}-${start + rows.length - 1}/${total}`);
       res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
@@ -121,9 +131,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
       }
       const row = await query.exec();
       if (!row) throw ApiError.notFound(`${resource} not found`);
-      const rawDoc = row.toJSON ? row.toJSON() : row;
-      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
-      res.json(result);
+      res.json(serializeDoc(row, opts.getTransform));
     }),
   );
 
@@ -143,9 +151,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
         query = query.populate(p);
       }
       const populatedRow = await query.exec();
-      const rawDoc = populatedRow?.toJSON ? populatedRow.toJSON() : populatedRow;
-      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
-      res.status(201).json(result);
+      res.status(201).json(serializeDoc(populatedRow, opts.getTransform));
     }),
   );
 
@@ -168,9 +174,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
         query = query.populate(p);
       }
       const populatedRow = await query.exec();
-      const rawDoc = populatedRow?.toJSON ? populatedRow.toJSON() : populatedRow;
-      const result = opts.getTransform ? opts.getTransform(rawDoc as Record<string, any>) : rawDoc;
-      res.json(result);
+      res.json(serializeDoc(populatedRow, opts.getTransform));
     }),
   );
 
