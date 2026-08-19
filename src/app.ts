@@ -4,8 +4,9 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import { env } from './config/env.js';
-import { publicRouter } from './public/index.js';
+import { uploadRouter } from './routes/upload.js';import { publicRouter } from './public/index.js';
 import { adminRouter } from './admin/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { buildSitemapXml } from './utils/sitemap.js';
@@ -56,6 +57,7 @@ export function createApp() {
     'https://namanpuja.com',
     'https://naman-puja-admin-panel.vercel.app',
     'https://naman-puja-admin-panel-tr63876wc-naman-puja.vercel.app',
+    'https://namanpuja-frontend-staging.vercel.app',
     ...env.corsOrigins.map((o) => o.replace(/\/$/, '')),
   ];
 
@@ -85,10 +87,16 @@ export function createApp() {
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'backend-namanpuja' }));
 
   // Public API (rate-limited)
+   // Serve uploaded images
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+  // Upload endpoint (before rate-limited public router so large image posts aren't throttled the same way)
+  app.use('/api/upload', uploadRouter);
+
+  // Public API (rate-limited)
   const publicLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true });
   app.use('/api', publicLimiter, publicRouter);
   app.use('/', publicLimiter, publicRouter);
-
   // Admin API (stricter limiter on the auth surface handled within)
   const adminLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
   app.use('/api/admin', adminLimiter, adminRouter);
