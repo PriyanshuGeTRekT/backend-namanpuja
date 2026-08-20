@@ -19,6 +19,6 @@
     "checkJs": false,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.js"],
+  "include": ["src/**/*.ts", "src/**/*.js", "scripts/migrateImagetoCloud.ts"],
   "exclude": ["node_modules", "dist"]
 }
