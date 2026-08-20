@@ -6,6 +6,8 @@ const countrySchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true },
     isoCode: { type: String },
     flagEmoji: { type: String },
+    continent: { type: String, default: 'Asia' },
+    description: { type: String },
     enabled: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
   },

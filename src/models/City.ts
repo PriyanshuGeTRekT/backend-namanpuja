@@ -7,6 +7,8 @@ const citySchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true },
     state: { type: String },
     geoRegion: { type: String },
+    region: { type: String, default: 'General' },
+    description: { type: String },
     latitude: { type: Number },
     longitude: { type: Number },
     enabled: { type: Boolean, default: true },

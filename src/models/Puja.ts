@@ -14,7 +14,7 @@ const pujaSchema = new mongoose.Schema(
     shortDesc: { type: String },
     shortDescription: { type: String },
     description: { type: String },
-    heroImage: { type: String },
+    featuredImage: { type: String },   
     benefits: { type: mongoose.Schema.Types.Mixed },
     rituals: { type: mongoose.Schema.Types.Mixed },
     samagri: { type: mongoose.Schema.Types.Mixed },

@@ -191,12 +191,11 @@ publicRouter.get(
     } else {
       filter.bhaktiType = { $ne: 'location' };
     }
-
-    const pujas = await Puja.find(filter)
-      .select('-featuredImage -blocks -seoDescription -excerpt')
-      .populate('category')
-      .sort({ isFeatured: -1, sortOrder: 1 })
-      .lean();
+const pujas = await Puja.find(filter)
+  .select('-blocks -seoDescription -excerpt')   // ← removed "-featuredImage"
+  .populate('category')
+  .sort({ isFeatured: -1, sortOrder: 1 })
+  .lean();
 
     const formatted = pujas.map((p: any) => ({
       ...p,
@@ -216,20 +215,26 @@ publicRouter.get(
   '/pujas/:slug',
   asyncHandler(async (req: Request, res: Response) => {
     const s = toSlug(req.params.slug);
-    const puja = await Puja.findOne({
-      $or: [
-        { slug: s },
-        { slug: s.toLowerCase() },
-        { slug: `${s}-puja` },
-        { slug: s.replace(/-puja$/, '') },
-      ],
-      enabled: { $ne: false },
-    }).populate('category');
+
+    // 1. Try exact match first
+    let puja = await Puja.findOne({ slug: s, enabled: { $ne: false } }).populate('category');
+
+    // 2. Only fall back to fuzzy variants if no exact match found
+    if (!puja) {
+      puja = await Puja.findOne({
+        $or: [
+          { slug: s.toLowerCase() },
+          { slug: `${s}-puja` },
+          { slug: s.replace(/-puja$/, '') },
+        ],
+        enabled: { $ne: false },
+      }).populate('category');
+    }
+
     if (!puja) throw ApiError.notFound('Puja not found');
     res.json(puja);
   }),
 );
-
 
 publicRouter.get(
   '/locations/:slug',
