@@ -90,7 +90,7 @@ export async function seedInitialData() {
         shortDesc: 'Invoke the blessings of Lord Ganesha for peace and prosperity.',
         shortDescription: 'Invoke the blessings of Lord Ganesha for peace and prosperity.',
         description: 'Ganesh Puja is performed before any new venture or auspicious occasion to seek the divine blessings of Lord Ganesha for removing obstacles.',
-        heroImage: '',
+    
         benefits: ['Removes obstacles', 'Brings peace & prosperity', 'Ensures success in new endeavors'],
         rituals: [{ name: 'Sankalp & Ganesh Avahan', description: 'Invocation of Lord Ganesha' }],
         samagri: [{ group: 'Puja Samagri', items: ['Modak', 'Flowers', 'Incense', 'Ghee Lamp'] }],
@@ -114,7 +114,7 @@ export async function seedInitialData() {
         shortDesc: 'Sacred ritual dedicated to Lord Vishnu for family health and prosperity.',
         shortDescription: 'Sacred ritual dedicated to Lord Vishnu for family health and prosperity.',
         description: 'Satyanarayan Katha and Puja is performed on Purnima or any special occasion for peace, wellness, and gratitude.',
-        heroImage: '',
+       
         benefits: ['Promotes family harmony', 'Overcomes health issues', 'Fulfills righteous desires'],
         rituals: [{ name: 'Katha Recitation', description: 'Reading of 5 chapters of Satyanarayan Katha' }],
         samagri: [{ group: 'Puja Samagri', items: ['Panjiri Prasad', 'Tulsi Leaves', 'Banana Leaves', 'Fruits'] }],
@@ -139,7 +139,7 @@ export async function seedInitialData() {
         shortDesc: 'Auspicious housewarming ritual to purify your new home and invite divine blessings.',
         shortDescription: 'Auspicious housewarming ritual to purify your new home and invite divine blessings.',
         description: 'Griha Pravesh Puja is performed before entering a new home to remove negative energies, appease Vastu Purush, and invite health and wealth.',
-        heroImage: '',
+       
         benefits: ['Purifies new home', 'Removes Vastu dosha', 'Invites positive energy and harmony'],
         rituals: [{ name: 'Vastu Shanti & Navagraha Puja', description: 'Pacifying directional deities and planets' }],
         samagri: [{ group: 'Puja Samagri', items: ['Mango Leaves', 'Kalash', 'Coconut', 'Turmeric'] }],
@@ -164,7 +164,7 @@ export async function seedInitialData() {
         shortDesc: 'Invoke Goddess Lakshmi for wealth, prosperity, and financial well-being.',
         shortDescription: 'Invoke Goddess Lakshmi for wealth, prosperity, and financial well-being.',
         description: 'Lakshmi Puja is dedicated to the Goddess of wealth and fortune, bringing prosperity, success, and removal of financial obstacles.',
-        heroImage: '',
+   
         benefits: ['Attracts wealth & abundance', 'Business success', 'Financial stability'],
         rituals: [{ name: 'Mahalakshmi Stotram & Archana', description: 'Chanting hymns for Goddess Lakshmi' }],
         samagri: [{ group: 'Puja Samagri', items: ['Lotus Flowers', 'Coins', 'Sweets', 'Kumkum'] }],
@@ -189,7 +189,7 @@ export async function seedInitialData() {
         shortDesc: 'Sacred ritual bathing of Shivling with milk, honey, ghee, and holy water.',
         shortDescription: 'Sacred ritual bathing of Shivling with milk, honey, ghee, and holy water.',
         description: 'Rudrabhishek is one of the most powerful Vedic rituals to worship Lord Shiva, washing away sins and bestowing health, peace, and spiritual strength.',
-        heroImage: '',
+       
         benefits: ['Bestows mental peace', 'Cures chronic ailments', 'Removes negative karma'],
         rituals: [{ name: 'Rudra Sukhtam Chanting & Abhishek', description: 'Bathing Shivling with sacred liquids' }],
         samagri: [{ group: 'Puja Samagri', items: ['Bilva Patra', 'Milk', 'Honey', 'Gangajal'] }],
@@ -214,7 +214,7 @@ export async function seedInitialData() {
         shortDesc: 'Sacred ritual to balance planetary energies and reduce obstacles in life.',
         shortDescription: 'Sacred ritual to balance planetary energies and reduce obstacles in life.',
         description: 'Navagraha Shanti Puja appeases all nine celestial planets, neutralizing negative planetary transits and bringing peace and stability.',
-        heroImage: '',
+      
         benefits: ['Reduces astrological doshas', 'Brings career stability', 'Removes obstacles'],
         rituals: [{ name: 'Navagraha Homa & Mantra Japa', description: 'Offering oblations to planetary deities' }],
         samagri: [{ group: 'Puja Samagri', items: ['9 Types of Grains', 'Colored Cloths', 'Sesame Seeds'] }],
@@ -239,7 +239,7 @@ export async function seedInitialData() {
         shortDesc: 'Traditional ceremony marking a baby’s first intake of solid food.',
         shortDescription: 'Traditional ceremony marking a baby’s first intake of solid food.',
         description: 'Annaprasan Samskara is performed when a baby is introduced to solid food for the first time, invoking blessings of Goddess Annapurna for health and vitality.',
-        heroImage: '',
+       
         benefits: ['Blesses child with good health', 'Prosperity & nourishment', 'Auspicious milestone'],
         rituals: [{ name: 'Feeding First Solid Food & Blessing', description: 'Offering blessed kheer or rice to the baby' }],
         samagri: [{ group: 'Puja Samagri', items: ['Sweet Kheer', 'Silver Spoon', 'Flowers', 'Fruits'] }],
