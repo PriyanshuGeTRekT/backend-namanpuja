@@ -6,7 +6,6 @@ import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
-import { Temple } from '../models/Temple.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 
@@ -275,15 +274,7 @@ export async function seedInitialData() {
       });
 
       // 7. Seed Temple
-      await Temple.create({
-        cityId: delhi._id,
-        name: 'Akshardham Temple',
-        slug: 'akshardham-temple-delhi',
-        description: 'Spiritual and cultural campus displaying traditional Hindu culture and architecture.',
-        enabled: true,
-        isFeatured: true,
-        sortOrder: 1,
-      });
+    
 
       // 8. Seed Dummy User & Bookings
       const dummyUserPassword = await bcrypt.hash('password123', 10);

@@ -13,7 +13,6 @@ import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
-import { Temple } from '../models/Temple.js';
 import { User } from '../models/User.js';
 import { buildSitemapXml } from '../utils/sitemap.js';
 import { toSlug } from '../utils/slug.js';
@@ -167,16 +166,8 @@ publicRouter.get(
       };
     });
 
-    const temples = await Temple.find({ cityId: (city as any)._id, enabled: { $ne: false } })
-      .sort({ isFeatured: -1, sortOrder: 1 })
-      .lean();
 
-    const formattedTemples = temples.map((t: any) => ({
-      ...t,
-      id: t._id ? t._id.toString() : t.id,
-    }));
-
-    res.json({ city: cityDoc, locations: formattedLocations, temples: formattedTemples });
+    res.json({ city: cityDoc, locations: formattedLocations, temples: [] });
   }),
 );
 
@@ -264,27 +255,9 @@ publicRouter.get(
 );
 
 
-publicRouter.get(
-  '/temples',
-  asyncHandler(async (_req, res: Response) => {
-    const temples = await Temple.find({ enabled: true })
-      .populate('city')
-      .sort({ isFeatured: -1, sortOrder: 1 });
-    res.json(temples);
-  }),
-);
 
-publicRouter.get(
-  '/temples/:slug',
-  asyncHandler(async (req: Request, res: Response) => {
-    const temple = await Temple.findOne({ slug: toSlug(req.params.slug), enabled: true }).populate({
-      path: 'city',
-      populate: { path: 'country' },
-    });
-    if (!temple) throw ApiError.notFound('Temple not found');
-    res.json(temple);
-  }),
-);
+
+
 
 
 publicRouter.post(

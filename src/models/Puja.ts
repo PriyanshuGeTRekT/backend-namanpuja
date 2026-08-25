@@ -11,6 +11,8 @@ const pujaSchema = new mongoose.Schema(
     durationMin: { type: Number },
     duration: { type: String },
     basePrice: { type: Number, default: 0 },
+    onlinePrice: { type: Number, default: 0 },
+    offlinePrice: { type: Number, default: 0 },
     shortDesc: { type: String },
     shortDescription: { type: String },
     description: { type: String },
@@ -45,6 +47,9 @@ pujaSchema.set('toJSON', {
   versionKey: false,
   transform: (_doc, ret: any) => {
     ret.id = ret._id ? ret._id.toString() : ret.id;
+    if (!ret.onlinePrice && ret.basePrice) {
+      ret.onlinePrice = ret.basePrice;
+    }
     delete ret._id;
   },
 });

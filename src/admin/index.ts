@@ -14,7 +14,6 @@ import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
-import { Temple } from '../models/Temple.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 
@@ -65,10 +64,34 @@ adminRouter.use(
   createCrudRouter({
     resource: 'countries',
     model: Country,
-    searchableFields: ['name', 'slug', 'isoCode'],
+    searchableFields: ['name', 'slug', 'isoCode', 'currencyCode'],
     defaultOrderBy: { sortOrder: 1 },
     beforeWrite: (data) => {
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
+      const kIso = String(data.isoCode || '').trim().toLowerCase();
+      const kName = String(data.name || '').trim().toLowerCase();
+      const defaultLookup: Record<string, { code: string; symbol: string }> = {
+        in: { code: 'INR', symbol: '₹' }, india: { code: 'INR', symbol: '₹' },
+        us: { code: 'USD', symbol: '$' }, usa: { code: 'USD', symbol: '$' }, 'united states': { code: 'USD', symbol: '$' },
+        gb: { code: 'GBP', symbol: '£' }, uk: { code: 'GBP', symbol: '£' }, 'united kingdom': { code: 'GBP', symbol: '£' },
+        ca: { code: 'CAD', symbol: 'CA$' }, canada: { code: 'CAD', symbol: 'CA$' },
+        au: { code: 'AUD', symbol: 'A$' }, australia: { code: 'AUD', symbol: 'A$' },
+        om: { code: 'OMR', symbol: 'OMR' }, oman: { code: 'OMR', symbol: 'OMR' },
+        ae: { code: 'AED', symbol: 'AED' }, uae: { code: 'AED', symbol: 'AED' }, 'united arab emirates': { code: 'AED', symbol: 'AED' },
+        de: { code: 'EUR', symbol: '€' }, germany: { code: 'EUR', symbol: '€' },
+        fr: { code: 'EUR', symbol: '€' }, france: { code: 'EUR', symbol: '€' },
+        sg: { code: 'SGD', symbol: 'S$' }, singapore: { code: 'SGD', symbol: 'S$' },
+        np: { code: 'NPR', symbol: 'NPR' }, nepal: { code: 'NPR', symbol: 'NPR' },
+        jp: { code: 'JPY', symbol: '¥' }, japan: { code: 'JPY', symbol: '¥' },
+        lk: { code: 'LKR', symbol: 'Rs' }, 'sri lanka': { code: 'LKR', symbol: 'Rs' },
+        th: { code: 'THB', symbol: '฿' }, thailand: { code: 'THB', symbol: '฿' },
+        my: { code: 'MYR', symbol: 'RM' }, malaysia: { code: 'MYR', symbol: 'RM' },
+        sa: { code: 'SAR', symbol: 'SAR' }, 'saudi arabia': { code: 'SAR', symbol: 'SAR' },
+        qa: { code: 'QAR', symbol: 'QAR' }, qatar: { code: 'QAR', symbol: 'QAR' },
+      };
+      const resolved = defaultLookup[kIso] || defaultLookup[kName] || { code: 'USD', symbol: '$' };
+      if (!data.currencyCode) data.currencyCode = resolved.code;
+      if (!data.currencySymbol) data.currencySymbol = resolved.symbol;
       return data;
     },
   }),
@@ -119,6 +142,14 @@ adminRouter.use(
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);
       }
+      if (data.onlinePrice !== undefined && data.onlinePrice !== '') {
+        data.onlinePrice = Number(data.onlinePrice);
+      } else if (data.basePrice) {
+        data.onlinePrice = Number(data.basePrice);
+      }
+      if (data.offlinePrice !== undefined && data.offlinePrice !== '') {
+        data.offlinePrice = Number(data.offlinePrice);
+      }
       return data;
     },
   }),
@@ -141,6 +172,14 @@ adminRouter.use(
         data.basePrice = Number(data.basePrice);
       } else {
         data.basePrice = 0;
+      }
+      if (data.onlinePrice !== undefined && data.onlinePrice !== '') {
+        data.onlinePrice = Number(data.onlinePrice);
+      } else if (data.basePrice) {
+        data.onlinePrice = Number(data.basePrice);
+      }
+      if (data.offlinePrice !== undefined && data.offlinePrice !== '') {
+        data.offlinePrice = Number(data.offlinePrice);
       }
       if (data.categoryId === '' || data.categoryId === null) {
         delete data.categoryId;
@@ -266,6 +305,8 @@ adminRouter.use(
           h1: `${doc.name || doc.title} in ${cityName}`,
           published: doc.status === 'published',
           basePrice: doc.basePrice !== undefined && doc.basePrice !== '' ? Number(doc.basePrice) : (existing?.basePrice ?? 0),
+          onlinePrice: doc.onlinePrice !== undefined && doc.onlinePrice !== '' ? Number(doc.onlinePrice) : existing?.onlinePrice,
+          offlinePrice: doc.offlinePrice !== undefined && doc.offlinePrice !== '' ? Number(doc.offlinePrice) : existing?.offlinePrice,
           intro: pick(doc.excerpt, existing?.intro),
           blocks: Array.isArray(doc.blocks) ? doc.blocks : (existing?.blocks ?? []),
           sections: sections,
@@ -302,6 +343,12 @@ adminRouter.use(
     searchableFields: ['slug', 'h1', 'metaTitle', 'cityName', 'countryName'],
     populate: ['puja', 'city'],
     beforeWrite: async (data) => {
+      if (data.onlinePrice !== undefined && data.onlinePrice !== '') {
+        data.onlinePrice = Number(data.onlinePrice);
+      }
+      if (data.offlinePrice !== undefined && data.offlinePrice !== '') {
+        data.offlinePrice = Number(data.offlinePrice);
+      }
       if ((!data.slug || !data.h1) && data.pujaId) {
         const puja = await Puja.findById(data.pujaId);
         
@@ -331,20 +378,6 @@ adminRouter.use(
   }),
 );
 
-adminRouter.use(
-  '/temples',
-  createCrudRouter({
-    resource: 'temples',
-    model: Temple,
-    searchableFields: ['name', 'slug', 'deity'],
-    populate: ['city'],
-    defaultOrderBy: { sortOrder: 1 },
-    beforeWrite: (data) => {
-      if (data.name && !data.slug) data.slug = toSlug(String(data.name));
-      return data;
-    },
-  }),
-);
 
 adminRouter.use(
   '/bookings',

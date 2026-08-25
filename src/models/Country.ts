@@ -5,6 +5,8 @@ const countrySchema = new mongoose.Schema(
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
     isoCode: { type: String },
+    currencyCode: { type: String },
+    currencySymbol: { type: String },
     flagEmoji: { type: String },
     continent: { type: String, default: 'Asia' },
     description: { type: String },
