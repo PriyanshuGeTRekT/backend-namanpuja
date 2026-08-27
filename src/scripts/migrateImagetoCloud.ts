@@ -1,3 +1,4 @@
+// $env:DRY_RUN="false"; npx tsx src/scripts/migrateImagetoCloud.ts
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';

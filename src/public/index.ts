@@ -7,6 +7,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { requireUserAuth } from '../middleware/auth.js';
 import { createFormSubmission } from '../bookings/createFormSubmission.js';
 import { paymentRouter } from '../routes/razourpayment.js';
+import { currencyRouter } from '../routes/currencyRoutes.js';
 
 import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
@@ -272,6 +273,7 @@ publicRouter.post(
   }),
 );
 
+publicRouter.use('/currency', currencyRouter);
 publicRouter.use('/payment', paymentRouter);
 
 
