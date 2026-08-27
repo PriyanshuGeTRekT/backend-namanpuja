@@ -23,7 +23,22 @@ currencyRouter.get(
     });
   }),
 );
-
+currencyRouter.get(
+  '/detect',
+  asyncHandler(async (req: Request, res: Response) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0] : req.socket.remoteAddress) || '';
+    
+    console.log('[currency/detect] x-forwarded-for header:', forwarded);
+    console.log('[currency/detect] req.socket.remoteAddress:', req.socket.remoteAddress);
+    console.log('[currency/detect] resolved ip used:', ip);
+    
+    const location = await detectLocationFromIP(ip);
+    console.log('[currency/detect] location result:', location);
+    
+    res.json(location);
+  }),
+);
 // GET /api/currency/detect - Detects user's country & currency from IP
 currencyRouter.get(
   '/detect',
