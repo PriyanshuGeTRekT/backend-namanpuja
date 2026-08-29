@@ -31,17 +31,8 @@ currencyRouter.get(
     const forwarded = req.headers['x-forwarded-for'];
     const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0] : req.socket.remoteAddress) || '';
 
-    const location = await detectLocationFromIP(ip);
-
-    // TEMPORARY DEBUG — remove after diagnosing
-    res.json({
-      ...location,
-      _debug: {
-        forwardedHeader: forwarded || null,
-        remoteAddress: req.socket.remoteAddress || null,
-        resolvedIp: ip,
-      },
-    });
+        const location = await detectLocationFromIP(ip);
+    res.json(location);
   }),
 );
 
