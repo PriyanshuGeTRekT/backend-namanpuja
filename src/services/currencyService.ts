@@ -190,8 +190,8 @@ export async function detectLocationFromIP(ip: string): Promise<{
         currency,
       };
     }
-  } catch (err: any) {
-    // ipapi.co rate limited or down, try ip-api.com
+   } catch (err: any) {
+    console.error('[detectLocationFromIP] ipapi.co failed:', err?.response?.status, err?.message);
     try {
       const res2 = await axios.get(`http://ip-api.com/json/${cleanIp}`, { timeout: 3000 });
       if (res2.data && res2.data.countryCode) {
@@ -203,8 +203,8 @@ export async function detectLocationFromIP(ip: string): Promise<{
           currency: config,
         };
       }
-    } catch {
-      // Ignore fallback error
+    } catch (err2: any) {
+      console.error('[detectLocationFromIP] ip-api.com failed:', err2?.response?.status, err2?.message);
     }
   }
 
