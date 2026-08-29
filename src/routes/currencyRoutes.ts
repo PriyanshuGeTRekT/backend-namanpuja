@@ -31,14 +31,17 @@ currencyRouter.get(
     const forwarded = req.headers['x-forwarded-for'];
     const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0] : req.socket.remoteAddress) || '';
 
-    console.log('[currency/detect] x-forwarded-for header:', forwarded);
-    console.log('[currency/detect] req.socket.remoteAddress:', req.socket.remoteAddress);
-    console.log('[currency/detect] resolved ip used:', ip);
-
     const location = await detectLocationFromIP(ip);
-    console.log('[currency/detect] location result:', location);
 
-    res.json(location);
+    // TEMPORARY DEBUG — remove after diagnosing
+    res.json({
+      ...location,
+      _debug: {
+        forwardedHeader: forwarded || null,
+        remoteAddress: req.socket.remoteAddress || null,
+        resolvedIp: ip,
+      },
+    });
   }),
 );
 
