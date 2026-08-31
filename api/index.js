@@ -9,6 +9,10 @@
 // Local development still uses `src/index.ts` (`npm run dev`), which calls
 // `app.listen()`. This file is only used by Vercel.
 import { createApp } from '../dist/app.js';
+import { connectDB } from '../dist/config/db.js';
+
+// Connect to MongoDB once per cold start (cached for warm invocations).
+await connectDB();
 
 const app = createApp();
 

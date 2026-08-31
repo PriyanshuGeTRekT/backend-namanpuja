@@ -9,9 +9,9 @@ import { PujaLocation } from '../models/PujaLocation.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 
-export async function seedInitialData() {
+export async function seedAdminUsers() {
   try {
-    // 1. Seed Admin User
+    // 1. Seed primary admin from env vars
     const adminEmail = env.seedAdmin.email.toLowerCase();
     const existingAdmin = await AdminUser.findOne({ email: adminEmail });
     if (!existingAdmin) {
@@ -33,7 +33,7 @@ export async function seedInitialData() {
       console.log(`👤 Default admin updated/synced: ${adminEmail}`);
     }
 
-    // 1b. Seed Second Admin User
+    // 1b. Seed second admin
     const secondAdminEmail = 'namanpuja@admin.com';
     const existingSecondAdmin = await AdminUser.findOne({ email: secondAdminEmail });
     if (!existingSecondAdmin) {
@@ -54,6 +54,16 @@ export async function seedInitialData() {
       // eslint-disable-next-line no-console
       console.log(`👤 Second admin updated/synced: ${secondAdminEmail}`);
     }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('⚠️ Error seeding admin users:', err);
+  }
+}
+
+export async function seedInitialData() {
+  try {
+    // Admin users are seeded separately (also runs in prod).
+    await seedAdminUsers();
 
     // 2. Seed Country if empty
     const countryCount = await Country.countDocuments();
