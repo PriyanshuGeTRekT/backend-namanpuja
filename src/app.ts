@@ -58,6 +58,7 @@ export function createApp() {
     'https://namanpuja.com',
     'https://naman-puja-admin-panel.vercel.app',
     'https://naman-puja-admin-panel-tr63876wc-naman-puja.vercel.app',
+    'https://api.namanpuja.com',
     'https://namanpuja-frontend-staging.vercel.app',
     ...env.corsOrigins.map((o) => o.replace(/\/$/, '')),
   ];
