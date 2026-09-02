@@ -4,19 +4,74 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { City } from '../models/City.js';
 import { Country } from '../models/Country.js';
+import { toSlug } from './slug.js';
+
+function escapeXml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 export async function buildSitemapXml(): Promise<string> {
-  const pujas = await Puja.find({}).select('slug updatedAt').lean();
-  const locations = await PujaLocation.find({})
-    .populate({ path: 'cityId', populate: { path: 'countryId' } })
-    .select('slug cityId updatedAt')
-    .lean();
-  const countries = await Country.find({}).select('slug updatedAt').lean();
-  const cities = await City.find({}).populate('countryId', 'slug').select('slug countryId updatedAt').lean();
-
   const today = new Date().toISOString().split('T')[0];
 
+  // 1. Fetch Countries & create lookups
+  const countries = await Country.find({ enabled: { $ne: false } }).select('_id name slug updatedAt').lean();
+  const countryMapById = new Map<string, any>();
+  const countryMapByName = new Map<string, any>();
+  for (const c of countries) {
+    if (c._id) countryMapById.set(c._id.toString(), c);
+    if (c.name) countryMapByName.set(c.name.toLowerCase().trim(), c);
+    if (c.slug) countryMapByName.set(c.slug.toLowerCase().trim(), c);
+  }
+
+  // 2. Fetch Cities & create lookups
+  const cities = await City.find({ enabled: { $ne: false } })
+    .populate('countryId', 'slug name')
+    .select('_id name slug countryId updatedAt')
+    .lean();
+
+  const cityMapById = new Map<string, { citySlug: string; countrySlug: string; updatedAt?: any }>();
+  const cityMapByName = new Map<string, { citySlug: string; countrySlug: string; updatedAt?: any }>();
+
+  for (const c of cities as any[]) {
+    if (!c.slug) continue;
+    let countrySlug = 'india';
+    if (c.countryId && typeof c.countryId === 'object' && c.countryId.slug) {
+      countrySlug = c.countryId.slug;
+    } else if (c.countryId) {
+      const matchedCountry = countryMapById.get(c.countryId.toString());
+      if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
+    }
+
+    const info = { citySlug: c.slug, countrySlug, updatedAt: c.updatedAt };
+    if (c._id) cityMapById.set(c._id.toString(), info);
+    if (c.name) cityMapByName.set(c.name.toLowerCase().trim(), info);
+    if (c.slug) cityMapByName.set(c.slug.toLowerCase().trim(), info);
+  }
+
+  // 3. Fetch Pujas
+  const pujas = await Puja.find({ enabled: { $ne: false } }).select('slug updatedAt').lean();
+
+  // 4. Fetch Puja Locations
+  const locations = await PujaLocation.find({ published: { $ne: false } })
+    .populate({ path: 'cityId', populate: { path: 'countryId' } })
+    .select('slug cityId cityName countryName updatedAt')
+    .lean();
+
+  const addedUrls = new Set<string>();
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+  function addUrl(loc: string, priority: string, changefreq: string, lastmod = today) {
+    const cleanUrl = loc.trim();
+    if (!addedUrls.has(cleanUrl)) {
+      addedUrls.add(cleanUrl);
+      xml += `  <url>\n    <loc>${escapeXml(cleanUrl)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>\n`;
+    }
+  }
 
   // Static pages
   const staticUrls = [
@@ -29,34 +84,85 @@ export async function buildSitemapXml(): Promise<string> {
   ];
 
   for (const u of staticUrls) {
-    xml += `  <url>\n    <loc>${u.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>\n`;
+    addUrl(u.loc, u.priority, u.changefreq);
   }
 
   // Countries (/countries/:slug-cities)
   for (const c of countries) {
     if (!c.slug) continue;
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/countries/${c.slug}-cities</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+    addUrl(`https://www.namanpuja.com/countries/${c.slug}-cities`, '0.85', 'weekly');
   }
 
   // Pujas (/pujas/:slug)
   for (const p of pujas) {
     if (!p.slug) continue;
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/pujas/${p.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+    addUrl(`https://www.namanpuja.com/pujas/${p.slug}`, '0.9', 'monthly');
   }
 
   // Cities (/countries/:countrySlug-cities/:citySlug)
   for (const c of cities as any[]) {
     if (!c.slug) continue;
-    const countrySlug = c.countryId?.slug || 'india';
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/countries/${countrySlug}-cities/${c.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+    let countrySlug = 'india';
+    if (c.countryId && typeof c.countryId === 'object' && c.countryId.slug) {
+      countrySlug = c.countryId.slug;
+    } else if (c.countryId) {
+      const matchedCountry = countryMapById.get(c.countryId.toString());
+      if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
+    }
+    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${c.slug}`, '0.85', 'weekly');
   }
 
   // Locations (/countries/:countrySlug-cities/:citySlug/:locationSlug)
   for (const l of locations as any[]) {
     if (!l.slug) continue;
-    const countrySlug = l.cityId?.countryId?.slug || 'india';
-    const citySlug = l.cityId?.slug || 'city';
-    xml += `  <url>\n    <loc>https://www.namanpuja.com/countries/${countrySlug}-cities/${citySlug}/${l.slug}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+
+    let countrySlug = '';
+    let citySlug = '';
+
+    // Strategy 1: Check populated cityId
+    if (l.cityId) {
+      if (typeof l.cityId === 'object') {
+        if (l.cityId.slug) citySlug = l.cityId.slug;
+        if (l.cityId.countryId && typeof l.cityId.countryId === 'object' && l.cityId.countryId.slug) {
+          countrySlug = l.cityId.countryId.slug;
+        } else if (l.cityId.countryId) {
+          const matchedCountry = countryMapById.get(l.cityId.countryId.toString());
+          if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
+        }
+      } else {
+        const cityInfo = cityMapById.get(l.cityId.toString());
+        if (cityInfo) {
+          citySlug = cityInfo.citySlug;
+          countrySlug = cityInfo.countrySlug;
+        }
+      }
+    }
+
+    // Strategy 2: Fallback to cityName / countryName string lookup
+    if (!citySlug && l.cityName) {
+      const cityInfo = cityMapByName.get(l.cityName.toLowerCase().trim());
+      if (cityInfo) {
+        citySlug = cityInfo.citySlug;
+        if (!countrySlug) countrySlug = cityInfo.countrySlug;
+      } else {
+        citySlug = toSlug(l.cityName);
+      }
+    }
+
+    if (!countrySlug && l.countryName) {
+      const matchedCountry = countryMapByName.get(l.countryName.toLowerCase().trim());
+      if (matchedCountry?.slug) {
+        countrySlug = matchedCountry.slug;
+      } else {
+        countrySlug = toSlug(l.countryName);
+      }
+    }
+
+    // Default fallback if still missing
+    if (!countrySlug) countrySlug = 'india';
+    if (!citySlug) citySlug = 'city';
+
+    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${citySlug}/${l.slug}`, '0.85', 'weekly');
   }
 
   xml += `</urlset>\n`;
@@ -67,17 +173,27 @@ export async function generateAndSaveSitemap() {
   try {
     const xml = await buildSitemapXml();
 
-    // Write to frontend-namanpuja public and dist sitemap.xml
-    const publicSitemapPath = path.resolve(process.cwd(), '../frontend-namanpuja/public/sitemap.xml');
-    const distSitemapPath = path.resolve(process.cwd(), '../frontend-namanpuja/dist/sitemap.xml');
+    const candidates = [
+      path.resolve(process.cwd(), '../frontend-namanpuja/public/sitemap.xml'),
+      path.resolve(process.cwd(), '../frontend-namanpuja/dist/sitemap.xml'),
+      path.resolve(process.cwd(), 'frontend-namanpuja/public/sitemap.xml'),
+      path.resolve(process.cwd(), 'frontend-namanpuja/dist/sitemap.xml'),
+      path.resolve(process.cwd(), 'public/sitemap.xml'),
+      path.resolve(process.cwd(), 'dist/sitemap.xml'),
+    ];
 
-    if (fs.existsSync(path.dirname(publicSitemapPath))) {
-      fs.writeFileSync(publicSitemapPath, xml, 'utf8');
-    }
-    if (fs.existsSync(path.dirname(distSitemapPath))) {
-      fs.writeFileSync(distSitemapPath, xml, 'utf8');
+    for (const sitemapPath of candidates) {
+      try {
+        const dir = path.dirname(sitemapPath);
+        if (fs.existsSync(dir)) {
+          fs.writeFileSync(sitemapPath, xml, 'utf8');
+        }
+      } catch (e) {
+        // ignore write errors to non-existent paths
+      }
     }
   } catch (err) {
     console.error('Error generating sitemap:', err);
   }
 }
+
