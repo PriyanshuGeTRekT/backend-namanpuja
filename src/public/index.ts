@@ -51,21 +51,37 @@ publicRouter.get(
   }),
 );
 
-publicRouter.get(
-  '/countries/:slug/cities',
-  asyncHandler(async (req: Request, res: Response) => {
-    const country = await Country.findOne({ slug: toSlug(req.params.slug) });
-    if (!country) throw ApiError.notFound('Country not found');
+const getCountryCitiesHandler = asyncHandler(async (req: Request, res: Response) => {
+  const rawParam = req.params.countrySlug || req.params.slug || '';
+  const cleanSlug = toSlug(rawParam.replace(/-cities$/, '').replace(/\/cities$/, ''));
 
-    const cities = await City.find({ countryId: country._id, enabled: { $ne: false } }).sort({
-      isPopular: -1,
-      sortOrder: 1,
-      name: 1,
-    });
+  const slugVariants = [cleanSlug, toSlug(rawParam)];
+  if (cleanSlug === 'usa' || cleanSlug === 'us') slugVariants.push('united-states');
+  if (cleanSlug === 'united-states') slugVariants.push('usa');
+  if (cleanSlug === 'uk') slugVariants.push('united-kingdom');
+  if (cleanSlug === 'united-kingdom') slugVariants.push('uk');
 
-    res.json({ country, cities });
-  }),
-);
+  const safeNameRegex = new RegExp(`^${cleanSlug.replace(/-/g, ' ')}$`, 'i');
+
+  const country = await Country.findOne({
+    $or: [
+      ...slugVariants.map((s) => ({ slug: s })),
+      { name: safeNameRegex },
+    ],
+  });
+  if (!country) throw ApiError.notFound('Country not found');
+
+  const cities = await City.find({ countryId: country._id, enabled: { $ne: false } }).sort({
+    isPopular: -1,
+    sortOrder: 1,
+    name: 1,
+  });
+
+  res.json({ country, cities });
+});
+
+publicRouter.get('/countries/:slug/cities', getCountryCitiesHandler);
+publicRouter.get('/countries/:countrySlug-cities', getCountryCitiesHandler);
 
 publicRouter.get(
   '/cities',
@@ -106,71 +122,71 @@ publicRouter.get(
   }),
 );
 
-publicRouter.get(
-  '/cities/:slug',
-  asyncHandler(async (req: Request, res: Response) => {
-    const rawSlug = req.params.slug;
-    const cleanSlug = toSlug(rawSlug);
+const getCityDetailHandler = asyncHandler(async (req: Request, res: Response) => {
+  const rawSlug = req.params.citySlug || req.params.slug || '';
+  const cleanSlug = toSlug(rawSlug);
 
-    const safeNameRegex = new RegExp(`^${rawSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/-/g, ' ')}$`, 'i');
-    const safeSlugRegex = new RegExp(`^${cleanSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+  const safeNameRegex = new RegExp(`^${rawSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/-/g, ' ')}$`, 'i');
+  const safeSlugRegex = new RegExp(`^${cleanSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
-    const city = await City.findOne({
-      $or: [
-        { slug: cleanSlug },
-        { slug: rawSlug },
-        { slug: rawSlug.toLowerCase() },
-        { name: safeNameRegex },
-        { slug: safeSlugRegex },
-      ],
-      enabled: { $ne: false },
-    })
-      .populate('country')
-      .lean();
+  const city = await City.findOne({
+    $or: [
+      { slug: cleanSlug },
+      { slug: rawSlug },
+      { slug: rawSlug.toLowerCase() },
+      { name: safeNameRegex },
+      { slug: safeSlugRegex },
+    ],
+    enabled: { $ne: false },
+  })
+    .populate('countryId')
+    .lean();
 
-    if (!city) {
-      throw ApiError.notFound('City not found');
-    }
+  if (!city) {
+    throw ApiError.notFound('City not found');
+  }
 
-    const cityDoc: any = {
-      ...city,
-      id: (city as any)._id ? (city as any)._id.toString() : (city as any).id,
-      country: (city as any).country
+  const cityCountry = (city as any).countryId || (city as any).country;
+
+  const cityDoc: any = {
+    ...city,
+    id: (city as any)._id ? (city as any)._id.toString() : (city as any).id,
+    country: cityCountry
+      ? {
+          ...cityCountry,
+          id: cityCountry._id ? cityCountry._id.toString() : cityCountry.id,
+        }
+      : undefined,
+  };
+
+  const locations = await PujaLocation.find({
+    cityId: (city as any)._id,
+    published: { $ne: false },
+  })
+    .populate({ path: 'pujaId', populate: { path: 'categoryId' } })
+    .sort({ createdAt: -1 });
+
+  const formattedLocations = locations.map((locDoc: any) => {
+    const l = locDoc.toJSON ? locDoc.toJSON() : locDoc;
+    const pujaObj = l.pujaId || l.puja;
+    return {
+      ...l,
+      id: l._id ? l._id.toString() : l.id,
+      puja: pujaObj
         ? {
-            ...(city as any).country,
-            id: (city as any).country._id
-              ? (city as any).country._id.toString()
-              : (city as any).country.id,
+            ...pujaObj,
+            id: pujaObj._id ? pujaObj._id.toString() : (pujaObj.id || pujaObj._id),
           }
         : undefined,
     };
+  });
 
-    const locations = await PujaLocation.find({
-      cityId: (city as any)._id,
-      published: { $ne: false },
-    })
-      .populate({ path: 'pujaId', populate: { path: 'categoryId' } })
-      .sort({ createdAt: -1 });
+  res.json({ city: cityDoc, locations: formattedLocations, temples: [] });
+});
 
-    const formattedLocations = locations.map((locDoc: any) => {
-      const l = locDoc.toJSON ? locDoc.toJSON() : locDoc;
-      const pujaObj = l.pujaId || l.puja;
-      return {
-        ...l,
-        id: l._id ? l._id.toString() : l.id,
-        puja: pujaObj
-          ? {
-              ...pujaObj,
-              id: pujaObj._id ? pujaObj._id.toString() : (pujaObj.id || pujaObj._id),
-            }
-          : undefined,
-      };
-    });
-
-
-    res.json({ city: cityDoc, locations: formattedLocations, temples: [] });
-  }),
-);
+publicRouter.get('/cities/:slug', getCityDetailHandler);
+publicRouter.get('/countries/:countrySlug-cities/:citySlug', getCityDetailHandler);
+publicRouter.get('/countries/:countrySlug/cities/:citySlug', getCityDetailHandler);
 
 publicRouter.get(
   '/pujas',
