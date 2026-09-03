@@ -53,8 +53,8 @@ export async function buildSitemapXml(): Promise<string> {
     if (c.slug) cityMapByName.set(c.slug.toLowerCase().trim(), info);
   }
 
-  // 3. Fetch Pujas
-  const pujas = await Puja.find({ enabled: { $ne: false } }).select('slug updatedAt').lean();
+  // 3. Fetch Pujas (only main pujas where bhaktiType is 'main')
+  const pujas = await Puja.find({ enabled: { $ne: false }, bhaktiType: 'main' }).select('slug updatedAt').lean();
 
   // 4. Fetch Puja Locations
   const locations = await PujaLocation.find({ published: { $ne: false } })
