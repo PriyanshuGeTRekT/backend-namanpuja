@@ -53,8 +53,13 @@ export async function buildSitemapXml(): Promise<string> {
     if (c.slug) cityMapByName.set(c.slug.toLowerCase().trim(), info);
   }
 
-  // 3. Fetch Pujas (only main pujas where bhaktiType is 'main')
-  const pujas = await Puja.find({ enabled: { $ne: false }, bhaktiType: 'main' }).select('slug updatedAt').lean();
+  // 3. Fetch Pujas (only main master pujas dynamically from DB)
+  const pujas = await Puja.find({
+    enabled: { $ne: false },
+    bhaktiType: 'main',
+    country: { $in: [null, ''] },
+    city: { $in: [null, ''] },
+  }).select('slug updatedAt').lean();
 
   // 4. Fetch Puja Locations
   const locations = await PujaLocation.find({ published: { $ne: false } })
@@ -169,6 +174,8 @@ export async function buildSitemapXml(): Promise<string> {
   return xml;
 }
 
+import { triggerAmplifyRebuild } from './amplifyWebhook.js';
+
 export async function generateAndSaveSitemap() {
   try {
     const xml = await buildSitemapXml();
@@ -192,6 +199,8 @@ export async function generateAndSaveSitemap() {
         // ignore write errors to non-existent paths
       }
     }
+
+    await triggerAmplifyRebuild();
   } catch (err) {
     console.error('Error generating sitemap:', err);
   }
