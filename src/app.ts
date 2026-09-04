@@ -40,6 +40,7 @@ export function createApp() {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, X-Total-Count');
     next();
   });
   app.use(compression());
@@ -80,7 +81,7 @@ export function createApp() {
 
         return callback(new Error(`Not allowed by CORS: ${origin}`));
       },
-      exposedHeaders: ['Content-Range'],
+      exposedHeaders: ['Content-Range', 'X-Total-Count'],
       credentials: true,
     }),
   );
