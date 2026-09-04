@@ -5,14 +5,14 @@ import { seedAdminUsers, seedInitialData } from './seed.js';
 let cachedConnection: typeof mongoose | null = null;
 
 export async function connectDB() {
-  if (cachedConnection && mongoose.connection.readyState === 1) {
-    return cachedConnection;
+  if (mongoose.connection.readyState === 1) {
+    return mongoose;
   }
 
   try {
     cachedConnection = await mongoose.connect(env.mongoUri, {
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       family: 4,
     });
