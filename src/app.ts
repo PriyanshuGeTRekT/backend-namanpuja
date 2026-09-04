@@ -95,13 +95,15 @@ export function createApp() {
   // Upload endpoint (before rate-limited public router so large image posts aren't throttled the same way)
   app.use('/api/upload', uploadRouter);
 
+  // Admin API (stricter limiter on the auth surface handled within)
+  const adminLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
+  app.use('/api/admin', adminLimiter, adminRouter);
+  app.use('/admin', adminLimiter, adminRouter);
+
   // Public API (rate-limited)
   const publicLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true });
   app.use('/api', publicLimiter, publicRouter);
   app.use('/', publicLimiter, publicRouter);
-  // Admin API (stricter limiter on the auth surface handled within)
-  const adminLimiter = rateLimit({ windowMs: 60_000, max: 300, standardHeaders: true });
-  app.use('/api/admin', adminLimiter, adminRouter);
 
   // Sitemap route at the root level before 404/catch-all handlers
   app.get('/sitemap.xml', async (_req, res) => {
