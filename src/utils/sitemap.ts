@@ -70,38 +70,38 @@ export async function buildSitemapXml(): Promise<string> {
   const addedUrls = new Set<string>();
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
-  function addUrl(loc: string, priority: string, changefreq: string, lastmod = today) {
+  function addUrl(loc: string, priority: string, lastmod = today) {
     const cleanUrl = loc.trim();
     if (!addedUrls.has(cleanUrl)) {
       addedUrls.add(cleanUrl);
-      xml += `  <url>\n    <loc>${escapeXml(cleanUrl)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>\n`;
+      xml += `  <url>\n    <loc>${escapeXml(cleanUrl)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <priority>${priority}</priority>\n  </url>\n`;
     }
   }
 
   // Static pages
   const staticUrls = [
-    { loc: 'https://www.namanpuja.com/', priority: '1.0', changefreq: 'weekly' },
-    { loc: 'https://www.namanpuja.com/book', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/pujas', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/countries', priority: '0.8', changefreq: 'monthly' },
-    { loc: 'https://www.namanpuja.com/login', priority: '0.3', changefreq: 'yearly' },
-    { loc: 'https://www.namanpuja.com/register', priority: '0.3', changefreq: 'yearly' },
+    { loc: 'https://www.namanpuja.com/', priority: '1.0' },
+    { loc: 'https://www.namanpuja.com/book', priority: '0.8' },
+    { loc: 'https://www.namanpuja.com/pujas', priority: '0.8' },
+    { loc: 'https://www.namanpuja.com/countries', priority: '0.8' },
+    { loc: 'https://www.namanpuja.com/login', priority: '0.3' },
+    { loc: 'https://www.namanpuja.com/register', priority: '0.3' },
   ];
 
   for (const u of staticUrls) {
-    addUrl(u.loc, u.priority, u.changefreq);
+    addUrl(u.loc, u.priority);
   }
 
   // Countries (/countries/:slug-cities)
   for (const c of countries) {
     if (!c.slug) continue;
-    addUrl(`https://www.namanpuja.com/countries/${c.slug}-cities`, '0.85', 'weekly');
+    addUrl(`https://www.namanpuja.com/countries/${c.slug}-cities`, '0.85');
   }
 
   // Pujas (/pujas/:slug)
   for (const p of pujas) {
     if (!p.slug) continue;
-    addUrl(`https://www.namanpuja.com/pujas/${p.slug}`, '0.9', 'monthly');
+    addUrl(`https://www.namanpuja.com/pujas/${p.slug}`, '0.9');
   }
 
   // Cities (/countries/:countrySlug-cities/:citySlug)
@@ -114,7 +114,7 @@ export async function buildSitemapXml(): Promise<string> {
       const matchedCountry = countryMapById.get(c.countryId.toString());
       if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
     }
-    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${c.slug}`, '0.85', 'weekly');
+    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${c.slug}`, '0.85');
   }
 
   // Locations (/countries/:countrySlug-cities/:citySlug/:locationSlug)
@@ -167,7 +167,7 @@ export async function buildSitemapXml(): Promise<string> {
     if (!countrySlug) countrySlug = 'india';
     if (!citySlug) citySlug = 'city';
 
-    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${citySlug}/${l.slug}`, '0.85', 'weekly');
+    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${citySlug}/${l.slug}`, '0.85');
   }
 
   xml += `</urlset>\n`;
