@@ -12,6 +12,64 @@ import { Router, type Request, type Response } from 'express';
 import type { Model } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure cloudinary for inline base64 uploads
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const base64Regex = /data:image\/[^"'\s<>)]+/gi;
+
+async function sanitizeBase64Images(node: any): Promise<any> {
+  if (!node) return node;
+
+  if (typeof node === 'string') {
+    if (node.includes('data:image/')) {
+      const matches = node.match(base64Regex);
+      if (matches && matches.length > 0) {
+        let newStr = node;
+        for (const rawMatch of matches) {
+          const match = rawMatch.trim();
+          try {
+            const uploadResult = await cloudinary.uploader.upload(match, {
+              folder: 'namanpuja-migrated',
+            });
+            newStr = newStr.replace(rawMatch, uploadResult.secure_url);
+          } catch (err: any) {
+            console.error(`Admin Panel: Failed to upload inline base64 image:`, err.message);
+          }
+        }
+        return newStr;
+      }
+    }
+    return node;
+  }
+
+  if (Array.isArray(node)) {
+    const newArr = [];
+    for (let i = 0; i < node.length; i++) {
+      newArr.push(await sanitizeBase64Images(node[i]));
+    }
+    return newArr;
+  }
+
+  if (typeof node === 'object') {
+    const newObj: any = {};
+    for (const key of Object.keys(node)) {
+      if (key.startsWith('$')) {
+        newObj[key] = node[key];
+        continue;
+      }
+      newObj[key] = await sanitizeBase64Images(node[key]);
+    }
+    return newObj;
+  }
+
+  return node;
+}
 
 interface CrudOptions {
   resource: string;
@@ -116,7 +174,8 @@ export function createCrudRouter(opts: CrudOptions): Router {
       const transformedRows = rows.map((r) => serializeDoc(r, opts.getTransform));
 
       res.setHeader('Content-Range', `${resource} ${start}-${start + rows.length - 1}/${total}`);
-      res.setHeader('Access-Control-Expose-Headers', 'Content-Range');
+      res.setHeader('X-Total-Count', total.toString());
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Range, X-Total-Count');
       res.json(transformedRows);
     }),
   );
@@ -141,6 +200,10 @@ export function createCrudRouter(opts: CrudOptions): Router {
     asyncHandler(async (req: Request, res: Response) => {
       let data = req.body as Record<string, unknown>;
       delete data.id;
+      
+      // Sanitize embedded base64 images before any custom beforeWrite logic
+      data = await sanitizeBase64Images(data);
+      
       if (opts.beforeWrite) data = await opts.beforeWrite(data, { isCreate: true });
       const row = await new model(data).save();
       
@@ -163,6 +226,10 @@ export function createCrudRouter(opts: CrudOptions): Router {
       delete data.id;
       delete data.createdAt;
       delete data.updatedAt;
+      
+      // Sanitize embedded base64 images before any custom beforeWrite logic
+      data = await sanitizeBase64Images(data);
+      
       if (opts.beforeWrite) data = await opts.beforeWrite(data, { isCreate: false });
       const row = await model.findByIdAndUpdate(req.params.id, data, { new: true });
       if (!row) throw ApiError.notFound(`${resource} not found`);

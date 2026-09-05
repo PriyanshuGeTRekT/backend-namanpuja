@@ -30,7 +30,6 @@ const pujaSchema = new mongoose.Schema(
   { timestamps: true, strict: false },
 );
 
-pujaSchema.index({ slug: 1 });
 pujaSchema.index({ enabled: 1, isFeatured: 1, sortOrder: 1 });
 pujaSchema.index({ categoryId: 1 });
 pujaSchema.index({ enabled: 1, bhaktiType: 1, isFeatured: -1, sortOrder: 1 });

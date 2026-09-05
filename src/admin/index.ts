@@ -134,8 +134,10 @@ adminRouter.use(
     searchableFields: ['name', 'slug', 'deity'],
     populate: ['category'],
     defaultOrderBy: { sortOrder: 1 },
+    baseFilter: { bhaktiType: { $ne: 'location' } },
     beforeWrite: (data) => {
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
+      if (!data.bhaktiType) data.bhaktiType = 'main';
       if (data.categoryId === '' || data.categoryId === null) {
         delete data.categoryId;
       }

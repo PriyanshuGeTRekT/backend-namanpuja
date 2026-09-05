@@ -38,7 +38,6 @@ const pujaLocationSchema = new mongoose.Schema(
   { timestamps: true, strict: false },
 );
 
-pujaLocationSchema.index({ slug: 1 });
 pujaLocationSchema.index({ cityId: 1, published: 1 });
 pujaLocationSchema.index({ pujaId: 1, published: 1 });
 pujaLocationSchema.index({ published: 1 });

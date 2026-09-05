@@ -2,8 +2,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
-import { Puja } from '../models/Puja.js';
-import { PujaLocation } from '../models/PujaLocation.js';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -13,231 +11,117 @@ cloudinary.config({
 
 // ── Safety controls ──
 // DRY_RUN=true  -> only logs what WOULD happen, no uploads, no DB writes
-// LIMIT=3       -> only processes the first N matching documents (per collection/field)
 const DRY_RUN = process.env.DRY_RUN !== 'false'; // defaults to true unless explicitly disabled
-const LIMIT = process.env.LIMIT ? parseInt(process.env.LIMIT, 10) : 0; // 0 = no limit
 
 interface MigrationResult {
   collection: string;
   id: string;
   name: string;
-  field: string; // e.g. "featuredImage" or "blocks[2].value"
+  field: string;
   oldSizeKB: number;
   newUrl?: string;
   status: 'success' | 'skipped' | 'error';
   error?: string;
 }
 
-// ───────────────────────── featuredImage migration (unchanged logic) ─────────────────────────
+const base64Regex = /data:image\/[^"'\s<>)]+/gi;
 
-async function processFeaturedImage(
-  doc: any,
-  model: typeof Puja | typeof PujaLocation,
-  collectionName: string,
-  results: MigrationResult[],
-) {
-  const name = doc.name || doc.title || doc._id.toString();
-  const base64 = doc.featuredImage as string;
-  const oldSizeKB = Math.round((base64.length * 3) / 4 / 1024);
-
-  console.log(`- [${collectionName}] "${name}" (_id: ${doc._id}) featuredImage — ~${oldSizeKB} KB`);
-
-  if (DRY_RUN) {
-    results.push({ collection: collectionName, id: doc._id.toString(), name, field: 'featuredImage', oldSizeKB, status: 'skipped' });
-    return;
-  }
-
-  try {
-    const uploadResult = await cloudinary.uploader.upload(base64, {
-      folder: 'namanpuja-migrated',
-      public_id: doc._id.toString(),
-    });
-
-    if (model === Puja) {
-      await Puja.updateOne({ _id: doc._id }, { $set: { featuredImage: uploadResult.secure_url } });
-    } else {
-      await PujaLocation.updateOne({ _id: doc._id }, { $set: { featuredImage: uploadResult.secure_url } });
-    }
-
-    console.log(`  ✅ Uploaded → ${uploadResult.secure_url}`);
-    results.push({
-      collection: collectionName,
-      id: doc._id.toString(),
-      name,
-      field: 'featuredImage',
-      oldSizeKB,
-      newUrl: uploadResult.secure_url,
-      status: 'success',
-    });
-  } catch (err: any) {
-    console.error(`  ❌ Failed for "${name}" (_id: ${doc._id}):`, err.message);
-    results.push({
-      collection: collectionName,
-      id: doc._id.toString(),
-      name,
-      field: 'featuredImage',
-      oldSizeKB,
-      status: 'error',
-      error: err.message,
-    });
-  }
-
-  await new Promise((resolve) => setTimeout(resolve, 300));
-}
-
-async function migratePujaCollection(results: MigrationResult[]) {
-  const query = { featuredImage: { $regex: '^data:image/' } };
-  let docs = await Puja.find(query);
-  if (LIMIT > 0) docs = docs.slice(0, LIMIT);
-
-  console.log(`\n[Puja] Found ${docs.length} document(s) with base64 featuredImage to process.\n`);
-
-  for (const doc of docs) {
-    await processFeaturedImage(doc, Puja, 'Puja', results);
-  }
-}
-
-async function migratePujaLocationFeaturedImage(results: MigrationResult[]) {
-  const query = { featuredImage: { $regex: '^data:image/' } };
-  let docs = await PujaLocation.find(query);
-  if (LIMIT > 0) docs = docs.slice(0, LIMIT);
-
-  console.log(`\n[PujaLocation] Found ${docs.length} document(s) with base64 featuredImage to process.\n`);
-
-  for (const doc of docs) {
-    await processFeaturedImage(doc, PujaLocation, 'PujaLocation', results);
-  }
-}
-
-// ───────────────────────── blocks[] migration (new) ─────────────────────────
-// `blocks` is Schema.Types.Mixed — a Content Builder array that can nest image
-// blocks inside other blocks (columns/groups/etc). We recursively walk it to
-// find every node shaped like { type: "image", value: "data:image/..." }.
-
-interface BlockMatch {
-  path: (string | number)[]; // path to the node's "value" property
-  value: string;
-}
-
-function findBase64ImageBlocks(node: any, path: (string | number)[] = []): BlockMatch[] {
-  const matches: BlockMatch[] = [];
-
-  if (Array.isArray(node)) {
-    node.forEach((item, idx) => {
-      matches.push(...findBase64ImageBlocks(item, [...path, idx]));
-    });
-  } else if (node && typeof node === 'object') {
-    if (node.type === 'image' && typeof node.value === 'string' && node.value.startsWith('data:image/')) {
-      matches.push({ path: [...path, 'value'], value: node.value });
-    }
-    for (const key of Object.keys(node)) {
-      matches.push(...findBase64ImageBlocks(node[key], [...path, key]));
-    }
-  }
-
-  return matches;
-}
-
-function setAtPath(root: any, path: (string | number)[], value: any) {
-  let cursor = root;
-  for (let i = 0; i < path.length - 1; i++) {
-    cursor = cursor[path[i]];
-  }
-  cursor[path[path.length - 1]] = value;
-}
-
-function pathToLabel(path: (string | number)[]): string {
-  return 'blocks' + path.map((p) => (typeof p === 'number' ? `[${p}]` : `.${p}`)).join('');
-}
-
-async function processLocationBlocks(doc: any, results: MigrationResult[]) {
-  const name = doc.h1 || doc.slug || doc._id.toString();
-  const matches = findBase64ImageBlocks(doc.blocks);
-
-  if (matches.length === 0) return;
-
-  console.log(`- [PujaLocation] "${name}" (_id: ${doc._id}) — ${matches.length} base64 image block(s)`);
-
+async function uploadBase64Images(node: any, docName: string, docId: string, collectionName: string, results: MigrationResult[]): Promise<{ node: any; changed: boolean }> {
   let changed = false;
 
-  for (const match of matches) {
-    const fieldLabel = pathToLabel(match.path);
-    const oldSizeKB = Math.round((match.value.length * 3) / 4 / 1024);
+  async function traverse(current: any, path: string): Promise<any> {
+    if (!current) return current;
 
-    console.log(`    · ${fieldLabel} — ~${oldSizeKB} KB`);
-
-    if (DRY_RUN) {
-      results.push({
-        collection: 'PujaLocation',
-        id: doc._id.toString(),
-        name,
-        field: fieldLabel,
-        oldSizeKB,
-        status: 'skipped',
-      });
-      continue;
+    if (typeof current === 'string') {
+      if (current.includes('data:image/')) {
+        const matches = current.match(base64Regex);
+        if (matches && matches.length > 0) {
+          let newStr = current;
+          for (const rawMatch of matches) {
+            const match = rawMatch.trim();
+            const oldSizeKB = Math.round((match.length * 3) / 4 / 1024);
+            console.log(`    · [${collectionName}] ${docName} -> ${path} — ~${oldSizeKB} KB`);
+            if (DRY_RUN) {
+              results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, status: 'skipped' });
+              changed = true;
+              continue;
+            }
+            try {
+              const publicId = `${docId}-${path}`.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 150);
+              const uploadResult = await cloudinary.uploader.upload(match, {
+                folder: 'namanpuja-migrated',
+                public_id: publicId,
+              });
+              console.log(`      ✅ Uploaded → ${uploadResult.secure_url}`);
+              newStr = newStr.replace(rawMatch, uploadResult.secure_url);
+              results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, newUrl: uploadResult.secure_url, status: 'success' });
+              changed = true;
+            } catch (err: any) {
+              console.error(`      ❌ Failed upload for ${path}:`, err.message);
+              results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, status: 'error', error: err.message });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+          return newStr;
+        }
+      }
+      return current;
     }
 
-    try {
-      const uploadResult = await cloudinary.uploader.upload(match.value, {
-        folder: 'namanpuja-migrated',
-        // include a path-derived suffix so multiple images in one doc don't collide
-        public_id: `${doc._id.toString()}-${match.path.join('-')}`,
-      });
-
-      setAtPath(doc.blocks, match.path, uploadResult.secure_url);
-      changed = true;
-
-      console.log(`      ✅ Uploaded → ${uploadResult.secure_url}`);
-      results.push({
-        collection: 'PujaLocation',
-        id: doc._id.toString(),
-        name,
-        field: fieldLabel,
-        oldSizeKB,
-        newUrl: uploadResult.secure_url,
-        status: 'success',
-      });
-    } catch (err: any) {
-      console.error(`      ❌ Failed for "${name}" (_id: ${doc._id}) at ${fieldLabel}:`, err.message);
-      results.push({
-        collection: 'PujaLocation',
-        id: doc._id.toString(),
-        name,
-        field: fieldLabel,
-        oldSizeKB,
-        status: 'error',
-        error: err.message,
-      });
+    if (Array.isArray(current)) {
+      const newArr = [];
+      for (let i = 0; i < current.length; i++) {
+        newArr.push(await traverse(current[i], path ? `${path}[${i}]` : `[${i}]`));
+      }
+      return newArr;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (typeof current === 'object') {
+      if (current instanceof Date || current instanceof mongoose.Types.ObjectId) return current;
+      const newObj: any = {};
+      for (const key of Object.keys(current)) {
+        if (key.startsWith('$')) {
+          newObj[key] = current[key];
+          continue;
+        }
+        newObj[key] = await traverse(current[key], path ? `${path}.${key}` : key);
+      }
+      return newObj;
+    }
+
+    return current;
   }
 
-  if (changed) {
-    // Required for Mixed-type fields: Mongoose doesn't auto-detect nested mutations.
-    doc.markModified('blocks');
-    // Update ONLY this exact document, by its own _id.
-    await PujaLocation.updateOne({ _id: doc._id }, { $set: { blocks: doc.blocks } });
-  }
+  const finalNode = await traverse(node, '');
+  return { node: finalNode, changed };
 }
 
-async function migratePujaLocationBlocks(results: MigrationResult[]) {
-  // blocks is Mixed/nested, so we can't reliably regex-match base64 at the query
-  // level — fetch candidates that have a blocks field at all, then filter in JS.
-  let docs = await PujaLocation.find({ blocks: { $exists: true, $ne: null } });
+async function migrateCollection(collectionName: string, results: MigrationResult[]) {
+  const collection = mongoose.connection.db!.collection(collectionName);
+  const docs = await collection.find({}).toArray();
 
-  docs = docs.filter((doc: any) => findBase64ImageBlocks(doc.blocks).length > 0);
-  if (LIMIT > 0) docs = docs.slice(0, LIMIT);
-
-  console.log(`\n[PujaLocation] Found ${docs.length} document(s) with base64 image block(s) in "blocks".\n`);
-
+  let count = 0;
   for (const doc of docs) {
-    await processLocationBlocks(doc, results);
+    const name = doc.name || doc.title || doc.h1 || doc.slug || doc._id.toString();
+    const { node: updatedDoc, changed } = await uploadBase64Images(doc, name, doc._id.toString(), collectionName, results);
+    
+    if (changed) {
+      count++;
+      if (!DRY_RUN) {
+        const docId = doc._id;
+        const copy = { ...updatedDoc };
+        delete copy._id;
+        await collection.replaceOne({ _id: docId }, copy);
+      }
+    }
+  }
+  
+  if (count > 0) {
+    console.log(`\n[${collectionName}] Processed ${count} document(s) containing base64 images.\n`);
+  } else {
+    console.log(`\n[${collectionName}] Found 0 document(s) with base64 images.\n`);
   }
 }
-
-// ───────────────────────── main ─────────────────────────
 
 async function main() {
   const mongoUri = process.env.MONGODB_URI;
@@ -246,13 +130,19 @@ async function main() {
   await mongoose.connect(mongoUri);
   console.log('✅ MongoDB connected');
   console.log(DRY_RUN ? '🔍 DRY RUN MODE — no changes will be made\n' : '⚠️  LIVE MODE — changes WILL be written\n');
-  if (LIMIT > 0) console.log(`Limiting to ${LIMIT} document(s) per collection/field.\n`);
 
   const results: MigrationResult[] = [];
 
-  await migratePujaCollection(results);
-  await migratePujaLocationFeaturedImage(results);
-  await migratePujaLocationBlocks(results);
+  const allCols = await mongoose.connection.db!.listCollections().toArray();
+  const collections = allCols
+    .map((c) => c.name)
+    .filter((name) => !name.startsWith('system.'));
+
+  console.log(`Found collections in database: ${collections.join(', ')}\n`);
+
+  for (const col of collections) {
+    await migrateCollection(col, results);
+  }
 
   console.log('\n\n========== SUMMARY ==========');
   console.log(`Total processed: ${results.length}`);
