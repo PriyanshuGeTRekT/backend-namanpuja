@@ -266,7 +266,9 @@ publicRouter.get(
 publicRouter.get(
   '/locations',
   asyncHandler(async (_req, res: Response) => {
-    const locations = await PujaLocation.find({ published: true }).select('slug updatedAt');
+    const locations = await PujaLocation.find({ published: true })
+      .select('slug updatedAt cityId')
+      .populate({ path: 'city', select: 'slug country', populate: { path: 'country', select: 'slug' } });
     res.json(locations);
   }),
 );
