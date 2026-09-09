@@ -17,6 +17,7 @@
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
+    "@aws-sdk/client-amplify": "^3.1128.0",
     "axios": "^1.20.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.10.0",

@@ -8,6 +8,7 @@ import { createCrudRouter } from './crudFactory.js';
 import { authRouter } from './auth.routes.js';
 import { toSlug, pujaLocationSlug } from '../utils/slug.js';
 import { generateAndSaveSitemap } from '../utils/sitemap.js';
+import { fireDeployHook } from '../utils/deployHook.js';
 
 import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
@@ -94,6 +95,8 @@ adminRouter.use(
       if (!data.currencySymbol) data.currencySymbol = resolved.symbol;
       return data;
     },
+    afterWrite: () => { fireDeployHook('countries'); },
+    afterDelete: () => { fireDeployHook('countries'); },
   }),
 );
 
@@ -109,6 +112,8 @@ adminRouter.use(
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
       return data;
     },
+    afterWrite: () => { fireDeployHook('cities'); },
+    afterDelete: () => { fireDeployHook('cities'); },
   }),
 );
 
@@ -123,6 +128,8 @@ adminRouter.use(
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
       return data;
     },
+    afterWrite: () => { fireDeployHook('puja-categories'); },
+    afterDelete: () => { fireDeployHook('puja-categories'); },
   }),
 );
 
@@ -154,6 +161,8 @@ adminRouter.use(
       }
       return data;
     },
+    afterWrite: () => { fireDeployHook('pujas'); },
+    afterDelete: () => { fireDeployHook('pujas'); },
   }),
 );
 
@@ -253,6 +262,7 @@ adminRouter.use(
       blocks: Array.isArray(doc.blocks) ? doc.blocks : [],
     }),
     afterWrite: async (doc, _ctx) => {
+      fireDeployHook('puja-pages');
       if (doc.bhaktiType === 'location' && doc.country && doc.city) {
         const cityName = String(doc.city).trim();
         const countryName = String(doc.country).trim();
@@ -351,9 +361,12 @@ adminRouter.use(
       if (data.offlinePrice !== undefined && data.offlinePrice !== '') {
         data.offlinePrice = Number(data.offlinePrice);
       }
-      if ((!data.slug || !data.h1) && data.pujaId) {
+
+      // Always recompute slug from puja + city — the admin UI shows it read-only,
+      // but we also strip any user-submitted value so the backend is the sole source of truth.
+      if (data.pujaId) {
         const puja = await Puja.findById(data.pujaId);
-        
+
         let cName = '';
         let cState = '';
         if (data.cityId) {
@@ -368,7 +381,7 @@ adminRouter.use(
         }
 
         if (puja && cName) {
-          if (!data.slug) data.slug = pujaLocationSlug(puja.name, cName, cState);
+          data.slug = pujaLocationSlug(puja.name, cName, cState);
           if (!data.h1) data.h1 = `${puja.name} in ${cName}${cState && !data.cityName ? ', ' + cState : ''}`;
         }
       }
@@ -376,7 +389,9 @@ adminRouter.use(
     },
     afterWrite: async () => {
       await generateAndSaveSitemap();
+      fireDeployHook('puja-locations');
     },
+    afterDelete: () => { fireDeployHook('puja-locations'); },
   }),
 );
 

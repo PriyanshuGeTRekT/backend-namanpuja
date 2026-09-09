@@ -80,6 +80,7 @@ interface CrudOptions {
   baseFilter?: Record<string, unknown>;
   beforeWrite?: (data: Record<string, unknown>, ctx: { isCreate: boolean }) => Promise<Record<string, unknown>> | Record<string, unknown>;
   afterWrite?: (doc: any, ctx: { isCreate: boolean }) => Promise<void> | void;
+  afterDelete?: (id: string) => Promise<void> | void;
   /** Transform the raw doc before sending it back on GET ONE (for edit-form field-name remapping) */
   getTransform?: (doc: Record<string, any>) => Record<string, any>;
 }
@@ -251,6 +252,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const row = await model.findByIdAndDelete(req.params.id);
       if (!row) throw ApiError.notFound(`${resource} not found`);
+      if (opts.afterDelete) await opts.afterDelete(req.params.id);
       res.json({ id: req.params.id });
     }),
   );
