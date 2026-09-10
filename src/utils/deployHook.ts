@@ -1,21 +1,9 @@
-/**
- * deployHook.ts
- *
- * Triggers an AWS Amplify build via the Amplify StartJob API whenever
- * content is created, updated, or deleted in the admin panel.
- *
- * Required environment variables (set in .env and in your hosting env):
- *   AMPLIFY_APP_ID       – Your Amplify app ID (e.g. d1234abcde)
- *   AMPLIFY_BRANCH       – Branch to build (e.g. main)
- *   AWS_REGION           – AWS region (e.g. ap-south-1)
- *   AWS_ACCESS_KEY_ID    – IAM access key with amplify:StartJob permission
- *   AWS_SECRET_ACCESS_KEY – IAM secret key
- *
- * The call is fully fire-and-forget: it does NOT await the build to finish,
- * it does NOT throw, and it does NOT block the admin save response.
- */
-
-import { AmplifyClient, StartJobCommand, JobType } from '@aws-sdk/client-amplify';
+import {
+  AmplifyClient,
+  StartJobCommand,
+  JobType,
+  type StartJobCommandOutput,
+} from '@aws-sdk/client-amplify';
 
 let _client: AmplifyClient | null = null;
 
@@ -56,7 +44,7 @@ export function fireDeployHook(resource: string): void {
   });
 
   client.send(command)
-    .then((res) => {
+    .then((res: StartJobCommandOutput) => {
       const jobId = res.jobSummary?.jobId ?? '?';
       console.log(`[deployHook] ✅ Amplify build started for resource="${resource}" | jobId=${jobId} branch=${branchName}`);
     })
