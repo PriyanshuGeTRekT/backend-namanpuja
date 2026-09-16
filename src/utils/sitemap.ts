@@ -4,7 +4,7 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { City } from '../models/City.js';
 import { Country } from '../models/Country.js';
-import { toSlug } from './slug.js';
+import { toSlug, pujaLocationSlug } from './slug.js';
 
 function escapeXml(unsafe: string): string {
   return unsafe
@@ -17,6 +17,21 @@ function escapeXml(unsafe: string): string {
 
 export async function buildSitemapXml(): Promise<string> {
   const today = new Date().toISOString().split('T')[0];
+
+  function formatLastmod(date?: any): string {
+    if (!date) return today;
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return today;
+      // Guard against future timestamps
+      const safeTime = Math.min(d.getTime(), Date.now());
+      return new Date(safeTime).toISOString().split('T')[0];
+    } catch {
+      return today;
+    }
+  }
+
+  const normalizeName = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // 1. Fetch Countries & create lookups
   const countries = await Country.find({ enabled: { $ne: false } }).select('_id name slug updatedAt').lean();
@@ -31,11 +46,11 @@ export async function buildSitemapXml(): Promise<string> {
   // 2. Fetch Cities & create lookups
   const cities = await City.find({ enabled: { $ne: false } })
     .populate('countryId', 'slug name')
-    .select('_id name slug countryId updatedAt')
+    .select('_id name slug state countryId updatedAt')
     .lean();
 
-  const cityMapById = new Map<string, { citySlug: string; countrySlug: string; updatedAt?: any }>();
-  const cityMapByName = new Map<string, { citySlug: string; countrySlug: string; updatedAt?: any }>();
+  const cityMapById = new Map<string, { citySlug: string; countrySlug: string; cityName: string; state?: string; updatedAt?: any }>();
+  const cityMapByName = new Map<string, { citySlug: string; countrySlug: string; cityName: string; state?: string; updatedAt?: any }>();
 
   for (const c of cities as any[]) {
     if (!c.slug) continue;
@@ -47,7 +62,7 @@ export async function buildSitemapXml(): Promise<string> {
       if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
     }
 
-    const info = { citySlug: c.slug, countrySlug, updatedAt: c.updatedAt };
+    const info = { citySlug: c.slug, countrySlug, cityName: c.name, state: c.state, updatedAt: c.updatedAt };
     if (c._id) cityMapById.set(c._id.toString(), info);
     if (c.name) cityMapByName.set(c.name.toLowerCase().trim(), info);
     if (c.slug) cityMapByName.set(c.slug.toLowerCase().trim(), info);
@@ -59,13 +74,74 @@ export async function buildSitemapXml(): Promise<string> {
     bhaktiType: 'main',
     country: { $in: [null, ''] },
     city: { $in: [null, ''] },
-  }).select('slug updatedAt').lean();
+  }).select('_id name slug updatedAt').lean();
 
-  // 4. Fetch Puja Locations
+  // 4. Fetch Puja Locations (real documents)
   const locations = await PujaLocation.find({ published: { $ne: false } })
     .populate({ path: 'cityId', populate: { path: 'countryId' } })
-    .select('slug cityId cityName countryName updatedAt')
+    .populate('pujaId', '_id name slug')
+    .select('slug cityId cityName countryName pujaId h1 updatedAt')
     .lean();
+
+  // Helper to extract puja ID from location doc (matching frontend getPujaId logic)
+  const getPujaId = (loc: any): string | undefined => {
+    if (loc.puja?.id) return String(loc.puja.id);
+    if (loc.puja?._id) return String(loc.puja._id);
+    const pId = loc.pujaId;
+    if (typeof pId === 'string' && pId) return pId;
+    if (typeof pId === 'object' && pId !== null) {
+      return pId.id ? String(pId.id) : pId._id ? String(pId._id) : pId.toString();
+    }
+    return undefined;
+  };
+
+  // Build a covered set of city+puja combinations that already have a real PujaLocation document
+  const coveredSet = new Set<string>();
+
+  for (const l of locations as any[]) {
+    // Resolve city identifiers
+    const cityKeys: string[] = [];
+    if (l.cityId) {
+      if (typeof l.cityId === 'object' && l.cityId._id) {
+        cityKeys.push(l.cityId._id.toString());
+        if (l.cityId.slug) cityKeys.push(l.cityId.slug.toLowerCase().trim());
+        if (l.cityId.name) cityKeys.push(normalizeName(l.cityId.name));
+      } else {
+        cityKeys.push(l.cityId.toString());
+        const cityInfo = cityMapById.get(l.cityId.toString());
+        if (cityInfo) {
+          cityKeys.push(cityInfo.citySlug.toLowerCase().trim());
+          cityKeys.push(normalizeName(cityInfo.cityName));
+        }
+      }
+    }
+    if (l.cityName) {
+      cityKeys.push(normalizeName(l.cityName));
+      const cityInfo = cityMapByName.get(l.cityName.toLowerCase().trim());
+      if (cityInfo) {
+        cityKeys.push(cityInfo.citySlug.toLowerCase().trim());
+      }
+    }
+
+    // Resolve puja identifiers
+    const pId = getPujaId(l);
+    const targetId = (l.puja as any)?.targetPujaId || (l as any)?.targetPujaId;
+    const pSlug = (l.pujaId && typeof l.pujaId === 'object' && l.pujaId.slug)
+      ? l.pujaId.slug
+      : ((l as any).puja?.slug || undefined);
+    const pName = (l.pujaId && typeof l.pujaId === 'object' && l.pujaId.name)
+      ? l.pujaId.name
+      : ((l as any).puja?.name || l.h1 || undefined);
+    const pNameNorm = normalizeName(pName);
+
+    for (const cKey of cityKeys) {
+      if (!cKey) continue;
+      if (pId) coveredSet.add(`id:${cKey}:${pId}`);
+      if (targetId) coveredSet.add(`id:${cKey}:${String(targetId)}`);
+      if (pSlug) coveredSet.add(`slug:${cKey}:${pSlug.toLowerCase().trim()}`);
+      if (pNameNorm) coveredSet.add(`name:${cKey}:${pNameNorm}`);
+    }
+  }
 
   const addedUrls = new Set<string>();
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
@@ -95,13 +171,13 @@ export async function buildSitemapXml(): Promise<string> {
   // Countries (/countries/:slug-cities)
   for (const c of countries) {
     if (!c.slug) continue;
-    addUrl(`https://www.namanpuja.com/countries/${c.slug}-cities`, '0.85');
+    addUrl(`https://www.namanpuja.com/countries/${c.slug.toLowerCase()}-cities`, '0.85', formatLastmod(c.updatedAt));
   }
 
   // Pujas (/pujas/:slug)
   for (const p of pujas) {
     if (!p.slug) continue;
-    addUrl(`https://www.namanpuja.com/pujas/${p.slug}`, '0.9');
+    addUrl(`https://www.namanpuja.com/pujas/${p.slug}`, '0.9', formatLastmod(p.updatedAt));
   }
 
   // Cities (/countries/:countrySlug-cities/:citySlug)
@@ -114,10 +190,14 @@ export async function buildSitemapXml(): Promise<string> {
       const matchedCountry = countryMapById.get(c.countryId.toString());
       if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
     }
-    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${c.slug}`, '0.85');
+    addUrl(
+      `https://www.namanpuja.com/countries/${countrySlug.toLowerCase()}-cities/${c.slug.toLowerCase()}`,
+      '0.85',
+      formatLastmod(c.updatedAt)
+    );
   }
 
-  // Locations (/countries/:countrySlug-cities/:citySlug/:locationSlug)
+  // Real Database Locations (/countries/:countrySlug-cities/:citySlug/:locationSlug)
   for (const l of locations as any[]) {
     if (!l.slug) continue;
 
@@ -167,7 +247,54 @@ export async function buildSitemapXml(): Promise<string> {
     if (!countrySlug) countrySlug = 'india';
     if (!citySlug) citySlug = 'city';
 
-    addUrl(`https://www.namanpuja.com/countries/${countrySlug}-cities/${citySlug}/${l.slug}`, '0.85');
+    addUrl(
+      `https://www.namanpuja.com/countries/${countrySlug.toLowerCase()}-cities/${citySlug.toLowerCase()}/${l.slug}`,
+      '0.85',
+      formatLastmod(l.updatedAt)
+    );
+  }
+
+  // Synthesized Mock Locations for every (City x Main Puja) combination not in real locations
+  for (const city of cities as any[]) {
+    if (!city.slug || !city.name) continue;
+
+    let countrySlug = 'india';
+    if (city.countryId && typeof city.countryId === 'object' && city.countryId.slug) {
+      countrySlug = city.countryId.slug;
+    } else if (city.countryId) {
+      const matchedCountry = countryMapById.get(city.countryId.toString());
+      if (matchedCountry?.slug) countrySlug = matchedCountry.slug;
+    }
+
+    const cityIdStr = city._id ? city._id.toString() : '';
+    const citySlugStr = city.slug.toLowerCase().trim();
+    const cityNameNorm = normalizeName(city.name);
+
+    for (const puja of pujas as any[]) {
+      if (!puja.name) continue;
+
+      const pId = puja._id ? puja._id.toString() : '';
+      const pSlug = puja.slug ? puja.slug.toLowerCase().trim() : '';
+      const pNameNorm = normalizeName(puja.name);
+
+      const isCovered =
+        (pId && (coveredSet.has(`id:${cityIdStr}:${pId}`) || coveredSet.has(`id:${citySlugStr}:${pId}`) || coveredSet.has(`id:${cityNameNorm}:${pId}`))) ||
+        (pSlug && (coveredSet.has(`slug:${cityIdStr}:${pSlug}`) || coveredSet.has(`slug:${citySlugStr}:${pSlug}`) || coveredSet.has(`slug:${cityNameNorm}:${pSlug}`))) ||
+        (pNameNorm && (coveredSet.has(`name:${cityIdStr}:${pNameNorm}`) || coveredSet.has(`name:${citySlugStr}:${pNameNorm}`) || coveredSet.has(`name:${cityNameNorm}:${pNameNorm}`)));
+
+      if (isCovered) {
+        continue;
+      }
+
+      const mockSlug = pujaLocationSlug(puja.name, city.name, city.state);
+      const lastmodDate = formatLastmod(puja.updatedAt || city.updatedAt || today);
+
+      addUrl(
+        `https://www.namanpuja.com/countries/${countrySlug.toLowerCase()}-cities/${citySlugStr}/${mockSlug}`,
+        '0.85',
+        lastmodDate
+      );
+    }
   }
 
   xml += `</urlset>\n`;
@@ -205,4 +332,5 @@ export async function generateAndSaveSitemap() {
     console.error('Error generating sitemap:', err);
   }
 }
+
 

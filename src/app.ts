@@ -11,6 +11,7 @@ import { publicRouter } from './public/index.js';
 import { adminRouter } from './admin/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { buildSitemapXml } from './utils/sitemap.js';
+import { getLegacyRedirect } from './utils/legacyRedirects.js';
 
 export function createApp() {
   const app = express();
@@ -89,8 +90,31 @@ export function createApp() {
   // Health check
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'backend-namanpuja' }));
 
-  // Public API (rate-limited)
-   // Serve uploaded images
+  // --- Legacy redirects ---
+  // IMPORTANT: this must run BEFORE publicRouter/adminRouter are mounted.
+  // Those routers are mounted at '/' and will otherwise intercept paths like
+  // '/city/dubai' and respond with their own 404 before this ever runs.
+  app.use((req, res, next) => {
+    let reqPath = req.path;
+    const isApi = reqPath.startsWith('/api/') || reqPath === '/api';
+    if (isApi) {
+      reqPath = reqPath.replace(/^\/api/, '');
+    }
+
+    const normPath = reqPath.trim().toLowerCase().replace(/\/+$/, '') || '/';
+    const target = getLegacyRedirect(normPath);
+
+    if (target) {
+      const finalTarget = isApi && !target.startsWith('/api') ? `/api${target}` : target;
+      const queryIdx = req.url.indexOf('?');
+      const queryString = queryIdx !== -1 ? req.url.slice(queryIdx) : '';
+      return res.redirect(301, finalTarget + queryString);
+    }
+
+    next();
+  });
+
+  // Serve uploaded images
   app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   // Upload endpoint (before rate-limited public router so large image posts aren't throttled the same way)
