@@ -10,9 +10,9 @@ const pujaLocationSchema = new mongoose.Schema(
     h1: { type: String },
     heroTagline: { type: String },
     intro: { type: String },
-    featuredImage: { type: String },     // uploaded hero image URL / base64
-    blocks: { type: mongoose.Schema.Types.Mixed },  // full Content Builder blocks array
-    sections: { type: mongoose.Schema.Types.Mixed }, // legacy heading+body pairs
+    featuredImage: { type: String },    
+    blocks: { type: mongoose.Schema.Types.Mixed },  
+    sections: { type: mongoose.Schema.Types.Mixed },
     benefits: { type: mongoose.Schema.Types.Mixed },
     rituals: { type: mongoose.Schema.Types.Mixed },
     samagri: { type: mongoose.Schema.Types.Mixed },

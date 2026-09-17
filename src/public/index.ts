@@ -15,6 +15,7 @@ import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { User } from '../models/User.js';
+import { Blog } from '../models/Blog.js';
 import { buildSitemapXml } from '../utils/sitemap.js';
 import { toSlug } from '../utils/slug.js';
 
@@ -169,10 +170,17 @@ const getCityDetailHandler = asyncHandler(async (req: Request, res: Response) =>
   const formattedLocations = locations.map((locDoc: any) => {
     const l = locDoc.toJSON ? locDoc.toJSON() : locDoc;
     const pujaObj = l.pujaId || l.puja;
+    const pIdStr = pujaObj?._id
+      ? pujaObj._id.toString()
+      : (pujaObj?.id ? String(pujaObj.id) : (typeof l.pujaId === 'string' ? l.pujaId : undefined));
+    const cIdStr = (city as any)._id ? (city as any)._id.toString() : (city as any).id;
+
     return {
       ...l,
       id: l._id ? l._id.toString() : l.id,
-      puja: pujaObj
+      pujaId: pIdStr,
+      cityId: cIdStr,
+      puja: pujaObj && typeof pujaObj === 'object'
         ? {
             ...pujaObj,
             id: pujaObj._id ? pujaObj._id.toString() : (pujaObj.id || pujaObj._id),
@@ -245,6 +253,82 @@ publicRouter.get(
 );
 
 publicRouter.get(
+  '/blogs',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { category, tag, search, limit = '50', page = '1' } = req.query as Record<string, string>;
+    const filter: any = { status: 'published' };
+
+    if (category && category.trim()) {
+      filter.category = new RegExp(`^${category.trim()}$`, 'i');
+    }
+
+    if (tag && tag.trim()) {
+      filter.tags = { $in: [new RegExp(`^${tag.trim()}$`, 'i')] };
+    }
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      filter.$or = [{ title: regex }, { excerpt: regex }, { author: regex }, { category: regex }, { tags: { $in: [regex] } }];
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [blogs, total] = await Promise.all([
+      Blog.find(filter)
+        .select('-content')
+        .sort({ publishDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Blog.countDocuments(filter),
+    ]);
+
+    const formatted = blogs.map((b: any) => ({
+      ...b,
+      id: b._id ? b._id.toString() : b.id,
+    }));
+
+    res.json({
+      blogs: formatted,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+    });
+  }),
+);
+
+publicRouter.get(
+  '/blogs/:slug',
+  asyncHandler(async (req: Request, res: Response) => {
+    const s = toSlug(req.params.slug);
+    const blog = await Blog.findOne({
+      $or: [{ slug: s }, { slug: req.params.slug }],
+      status: 'published',
+    })
+      .populate('relatedBlogs', 'title slug featuredImage excerpt category readTime publishDate author')
+      .lean();
+
+    if (!blog) throw ApiError.notFound('Blog not found');
+
+    const formatted = {
+      ...blog,
+      id: (blog as any)._id ? (blog as any)._id.toString() : (blog as any).id,
+      relatedBlogs: Array.isArray((blog as any).relatedBlogs)
+        ? (blog as any).relatedBlogs.map((r: any) => ({
+            ...r,
+            id: r._id ? r._id.toString() : r.id,
+          }))
+        : [],
+    };
+
+    res.json(formatted);
+  }),
+);
+
+
+publicRouter.get(
   '/locations/:slug',
   asyncHandler(async (req: Request, res: Response) => {
     const location = await PujaLocation.findOne({ slug: toSlug(req.params.slug), published: true }).populate([
@@ -256,8 +340,24 @@ publicRouter.get(
     PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
 
     const json = location.toJSON() as any;
-    if (json.pujaId) json.puja = json.pujaId;
-    if (json.cityId) json.city = json.cityId;
+    const pujaDoc = json.pujaId || json.puja;
+    const cityDoc = json.cityId || json.city;
+
+    if (pujaDoc && typeof pujaDoc === 'object') {
+      json.puja = {
+        ...pujaDoc,
+        id: pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id || pujaDoc._id),
+      };
+      json.pujaId = pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id ? String(pujaDoc.id) : String(pujaDoc));
+    }
+
+    if (cityDoc && typeof cityDoc === 'object') {
+      json.city = {
+        ...cityDoc,
+        id: cityDoc._id ? cityDoc._id.toString() : (cityDoc.id || cityDoc._id),
+      };
+      json.cityId = cityDoc._id ? cityDoc._id.toString() : (cityDoc.id ? String(cityDoc.id) : String(cityDoc));
+    }
 
     res.json(json);
   }),

@@ -17,6 +17,7 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
+import { Blog } from '../models/Blog.js';
 
 export const adminRouter = Router();
 
@@ -405,3 +406,43 @@ adminRouter.use(
     populate: ['puja', 'city', 'user'],
   }),
 );
+
+adminRouter.use(
+  '/blogs',
+  createCrudRouter({
+    resource: 'blogs',
+    model: Blog,
+    searchableFields: ['title', 'slug', 'author', 'category', 'excerpt'],
+    populate: ['relatedBlogs'],
+    defaultOrderBy: { publishDate: -1 },
+    beforeWrite: (data) => {
+      if (data.title && !data.slug) {
+        data.slug = toSlug(String(data.title));
+      } else if (data.slug) {
+        data.slug = toSlug(String(data.slug));
+      }
+      if (typeof data.tags === 'string') {
+        data.tags = (data.tags as string)
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean);
+      }
+      if (typeof data.seoKeywords === 'string') {
+        data.seoKeywords = (data.seoKeywords as string)
+          .split(',')
+          .map((k) => k.trim())
+          .filter(Boolean);
+      }
+      return data;
+    },
+    afterWrite: async () => {
+      await generateAndSaveSitemap();
+      fireDeployHook('blogs');
+    },
+    afterDelete: async () => {
+      await generateAndSaveSitemap();
+      fireDeployHook('blogs');
+    },
+  }),
+);
+

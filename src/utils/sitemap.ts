@@ -4,6 +4,7 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 import { City } from '../models/City.js';
 import { Country } from '../models/Country.js';
+import { Blog } from '../models/Blog.js';
 import { toSlug, pujaLocationSlug } from './slug.js';
 
 function escapeXml(unsafe: string): string {
@@ -159,6 +160,7 @@ export async function buildSitemapXml(): Promise<string> {
     { loc: 'https://www.namanpuja.com/', priority: '1.0' },
     { loc: 'https://www.namanpuja.com/book', priority: '0.8' },
     { loc: 'https://www.namanpuja.com/pujas', priority: '0.8' },
+    { loc: 'https://www.namanpuja.com/blogs', priority: '0.8' },
     { loc: 'https://www.namanpuja.com/countries', priority: '0.8' },
     { loc: 'https://www.namanpuja.com/login', priority: '0.3' },
     { loc: 'https://www.namanpuja.com/register', priority: '0.3' },
@@ -167,6 +169,18 @@ export async function buildSitemapXml(): Promise<string> {
   for (const u of staticUrls) {
     addUrl(u.loc, u.priority);
   }
+
+  // Blogs (/blogs/:slug)
+  try {
+    const publishedBlogs = await Blog.find({ status: 'published' }).select('slug updatedAt').lean();
+    for (const b of publishedBlogs) {
+      if (!b.slug) continue;
+      addUrl(`https://www.namanpuja.com/blogs/${b.slug.toLowerCase()}`, '0.8', formatLastmod(b.updatedAt));
+    }
+  } catch (err) {
+    console.error('Sitemap: Failed to query blogs', err);
+  }
+
 
   // Countries (/countries/:slug-cities)
   for (const c of countries) {
