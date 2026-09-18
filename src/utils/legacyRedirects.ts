@@ -1,5 +1,5 @@
 export const legacyRedirects: Record<string, string> = {
-  '/city/salalh': '/countries/oman-cities/salalh',
+  '/city/salalh': '/countries/oman-cities/salalah',
   '/city/london': '/countries/uk-cities/london',
   '/locations/satyanarayan-katha-in-bradford-book-online-or-at-home-in-bradford': '/countries/uk-cities/bradford/satyanarayan-katha-in-bradford-book-online-or-at-home-in-bradford',
   '/city/mumbai': '/countries/india-cities/mumbai',
@@ -157,7 +157,7 @@ export const legacyRedirects: Record<string, string> = {
   '/pujas/sunnyvale': '/countries/united-states-cities/sunnyvale/ganesh-puja-naman-puja-online-and-at-home-in-sunnyvale',
   '/pujas/umm-al-quwain': '/countries/uae-cities/ummalquwain/ganesh-puja-in-umm-al-quwain-umm-al-quwain',
   '/pujas/mainpuja':'/pujas',
-  '/mainlocation':'/continent',
+  '/mainlocation':'/countries',
   '/temples/govind-dev-ji-temple-jaipur':'/pujas',
   '/locations/navagraha-shanti-puja-in-rishikesh-uttarakhand':'/countries/india-cities',
   '/locations/navagraha-shanti-puja-in-mathura-uttar-pradesh':'/countries/india-cities',
