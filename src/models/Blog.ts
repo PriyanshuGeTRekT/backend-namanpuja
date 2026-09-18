@@ -46,6 +46,9 @@ const blogSchema = new mongoose.Schema(
     content: {
       type: String, // HTML or Markdown
     },
+    blocks: {
+      type: mongoose.Schema.Types.Mixed,
+    },
     faqs: [
       {
         question: { type: String, trim: true },
@@ -84,6 +87,7 @@ const blogSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    strict: false,
     bufferCommands: false,
   },
 );

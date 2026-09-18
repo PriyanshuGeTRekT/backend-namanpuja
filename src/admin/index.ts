@@ -407,6 +407,58 @@ adminRouter.use(
   }),
 );
 
+function compileBlogBlocksToHtml(blocks: Array<{ type: string; value: any; bgColor?: string }>): string {
+  if (!Array.isArray(blocks) || blocks.length === 0) return '';
+  const htmlParts: string[] = [];
+
+  for (const b of blocks) {
+    if (!b || !b.type) continue;
+    if (b.type === 'heading' && typeof b.value === 'string' && b.value.trim()) {
+      htmlParts.push(`<h2>${b.value.trim()}</h2>`);
+    } else if (b.type === 'paragraph' && typeof b.value === 'string' && b.value.trim()) {
+      const bgStyle = b.bgColor && b.bgColor !== '#ffffff' ? ` style="background-color: ${b.bgColor}; padding: 14px 18px; border-radius: 12px; margin-bottom: 1.5rem;"` : '';
+      const formatted = b.value.trim().replace(/\n/g, '<br/>');
+      htmlParts.push(`<p${bgStyle}>${formatted}</p>`);
+    } else if (b.type === 'image' && typeof b.value === 'string' && b.value.trim()) {
+      htmlParts.push(`<img src="${b.value.trim()}" alt="Blog visual" class="rounded-2xl my-6 w-full" loading="lazy" />`);
+    } else if (b.type === 'timing' && b.value && typeof b.value === 'object') {
+      const label = b.value.label ? `<strong>${b.value.label}:</strong> ` : '';
+      const time = b.value.time || '';
+      if (label || time) {
+        htmlParts.push(`<p class="timing-badge">${label}${time}</p>`);
+      }
+    } else if (b.type === 'table' && b.value && typeof b.value === 'object') {
+      const cols = Array.isArray(b.value.columns) ? b.value.columns : [];
+      const rows = Array.isArray(b.value.rows) ? b.value.rows : [];
+      if (cols.length > 0 || rows.length > 0) {
+        let tableHtml = '<div class="overflow-x-auto my-6"><table class="w-full border-collapse border border-stone-200"><thead><tr class="bg-stone-100">';
+        for (const col of cols) {
+          tableHtml += `<th class="border border-stone-200 p-2 text-left font-bold">${col}</th>`;
+        }
+        tableHtml += '</tr></thead><tbody>';
+        for (const row of rows) {
+          tableHtml += '<tr>';
+          const cells = Array.isArray(row.cells) ? row.cells : [];
+          for (let c = 0; c < cols.length; c++) {
+            tableHtml += `<td class="border border-stone-200 p-2">${cells[c] || ''}</td>`;
+          }
+          tableHtml += '</tr>';
+        }
+        tableHtml += '</tbody></table></div>';
+        htmlParts.push(tableHtml);
+      }
+    } else if (b.type === 'cta' && b.value && typeof b.value === 'object') {
+      const label = b.value.label || 'Read More';
+      const url = b.value.url || '#';
+      htmlParts.push(
+        `<div class="my-8 text-center"><a href="${url}" class="inline-block bg-[#D77E1E] text-white font-bold px-6 py-3 rounded-full hover:bg-orange-600 transition shadow-sm">${label}</a></div>`
+      );
+    }
+  }
+
+  return htmlParts.join('\n');
+}
+
 adminRouter.use(
   '/blogs',
   createCrudRouter({
@@ -433,8 +485,65 @@ adminRouter.use(
           .map((k) => k.trim())
           .filter(Boolean);
       }
+      if (Array.isArray(data.relatedBlogs)) {
+        data.relatedBlogs = data.relatedBlogs
+          .map((b: any) => {
+            if (!b) return null;
+            if (typeof b === 'object') return b.id || b._id || null;
+            return String(b);
+          })
+          .filter((id: any) => typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id));
+      } else {
+        data.relatedBlogs = [];
+      }
+      if (Array.isArray(data.faqs)) {
+        data.faqs = data.faqs.filter((f: any) => f && (f.question || f.answer));
+      }
+      if (data.publishDate === '' || data.publishDate === null) {
+        data.publishDate = new Date();
+      }
+      if (Array.isArray(data.blocks) && data.blocks.length > 0) {
+        const compiledHtml = compileBlogBlocksToHtml(data.blocks);
+        if (compiledHtml) {
+          data.content = compiledHtml;
+        }
+        // Auto-populate excerpt from first paragraph if missing
+        if (!data.excerpt || typeof data.excerpt !== 'string' || !data.excerpt.trim()) {
+          const firstP = (data.blocks as any[]).find((b: any) => b && b.type === 'paragraph' && typeof b.value === 'string' && b.value.trim());
+          if (firstP) {
+            const cleanText = firstP.value.trim().replace(/\s+/g, ' ');
+            data.excerpt = cleanText.slice(0, 200) + (cleanText.length > 200 ? '...' : '');
+          }
+        }
+        // Auto-populate readTime if missing
+        if (!data.readTime || typeof data.readTime !== 'string' || !data.readTime.trim()) {
+          const totalWords = (data.blocks as any[])
+            .map((b: any) => (typeof b?.value === 'string' ? b.value : ''))
+            .join(' ')
+            .split(/\s+/)
+            .filter(Boolean).length;
+          const mins = Math.max(1, Math.ceil(totalWords / 200));
+          data.readTime = `${mins} min read`;
+        }
+      }
       return data;
     },
+    getTransform: (doc: Record<string, any>) => ({
+      ...doc,
+      relatedBlogs: Array.isArray(doc.relatedBlogs)
+        ? doc.relatedBlogs
+            .map((b: any) => (typeof b === 'object' && b !== null ? (b.id || b._id || String(b)) : b))
+            .filter(Boolean)
+        : [],
+      blocks: Array.isArray(doc.blocks) ? doc.blocks : [],
+      faqs: Array.isArray(doc.faqs) ? doc.faqs : [],
+      tags: Array.isArray(doc.tags)
+        ? doc.tags
+        : (typeof doc.tags === 'string' ? doc.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []),
+      seoKeywords: Array.isArray(doc.seoKeywords)
+        ? doc.seoKeywords
+        : (typeof doc.seoKeywords === 'string' ? doc.seoKeywords.split(',').map((k: string) => k.trim()).filter(Boolean) : []),
+    }),
     afterWrite: async () => {
       await generateAndSaveSitemap();
       fireDeployHook('blogs');

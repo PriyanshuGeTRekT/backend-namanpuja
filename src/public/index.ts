@@ -256,7 +256,7 @@ publicRouter.get(
   '/blogs',
   asyncHandler(async (req: Request, res: Response) => {
     const { category, tag, search, limit = '50', page = '1' } = req.query as Record<string, string>;
-    const filter: any = { status: 'published' };
+    const filter: any = { status: { $ne: 'draft' } };
 
     if (category && category.trim()) {
       filter.category = new RegExp(`^${category.trim()}$`, 'i');
@@ -305,7 +305,7 @@ publicRouter.get(
     const s = toSlug(req.params.slug);
     const blog = await Blog.findOne({
       $or: [{ slug: s }, { slug: req.params.slug }],
-      status: 'published',
+      status: { $ne: 'draft' },
     })
       .populate('relatedBlogs', 'title slug featuredImage excerpt category readTime publishDate author')
       .lean();
