@@ -381,8 +381,8 @@ adminRouter.use(
           cState = data.countryName ? String(data.countryName) : '';
         }
 
-        if (puja && cName) {
-          data.slug = pujaLocationSlug(puja.name, cName, cState);
+        if (puja && cName && !data.slug) {
+            data.slug = pujaLocationSlug(puja.name, cName, cState);
           if (!data.h1) data.h1 = `${puja.name} in ${cName}${cState && !data.cityName ? ', ' + cState : ''}`;
         }
       }

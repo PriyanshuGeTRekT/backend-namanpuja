@@ -162,8 +162,8 @@ export async function buildSitemapXml(): Promise<string> {
     { loc: 'https://www.namanpuja.com/pujas', priority: '0.8' },
     { loc: 'https://www.namanpuja.com/blogs', priority: '0.8' },
     { loc: 'https://www.namanpuja.com/countries', priority: '0.8' },
-    { loc: 'https://www.namanpuja.com/login', priority: '0.3' },
-    { loc: 'https://www.namanpuja.com/register', priority: '0.3' },
+    // { loc: 'https://www.namanpuja.com/login', priority: '0.3' },
+    // { loc: 'https://www.namanpuja.com/register', priority: '0.3' },
   ];
 
   for (const u of staticUrls) {
