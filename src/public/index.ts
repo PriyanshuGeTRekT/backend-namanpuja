@@ -328,40 +328,42 @@ publicRouter.get(
 );
 
 
-publicRouter.get(
-  '/locations/:slug',
-  asyncHandler(async (req: Request, res: Response) => {
-    const location = await PujaLocation.findOne({ slug: toSlug(req.params.slug), published: true }).populate([
-      { path: 'pujaId', populate: { path: 'category' } },
-      { path: 'cityId', populate: { path: 'country' } },
-    ]);
-    if (!location) throw ApiError.notFound('Page not found');
+const getLocationDetailHandler = asyncHandler(async (req: Request, res: Response) => {
+  const location = await PujaLocation.findOne({ slug: toSlug(req.params.slug), published: true }).populate([
+    { path: 'pujaId', populate: { path: 'category' } },
+    { path: 'cityId', populate: { path: 'country' } },
+  ]);
+  if (!location) throw ApiError.notFound('Page not found');
 
-    PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
+  PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
 
-    const json = location.toJSON() as any;
-    const pujaDoc = json.pujaId || json.puja;
-    const cityDoc = json.cityId || json.city;
+  const json = location.toJSON() as any;
+  const pujaDoc = json.pujaId || json.puja;
+  const cityDoc = json.cityId || json.city;
 
-    if (pujaDoc && typeof pujaDoc === 'object') {
-      json.puja = {
-        ...pujaDoc,
-        id: pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id || pujaDoc._id),
-      };
-      json.pujaId = pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id ? String(pujaDoc.id) : String(pujaDoc));
-    }
+  if (pujaDoc && typeof pujaDoc === 'object') {
+    json.puja = {
+      ...pujaDoc,
+      id: pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id || pujaDoc._id),
+    };
+    json.pujaId = pujaDoc._id ? pujaDoc._id.toString() : (pujaDoc.id ? String(pujaDoc.id) : String(pujaDoc));
+  }
 
-    if (cityDoc && typeof cityDoc === 'object') {
-      json.city = {
-        ...cityDoc,
-        id: cityDoc._id ? cityDoc._id.toString() : (cityDoc.id || cityDoc._id),
-      };
-      json.cityId = cityDoc._id ? cityDoc._id.toString() : (cityDoc.id ? String(cityDoc.id) : String(cityDoc));
-    }
+  if (cityDoc && typeof cityDoc === 'object') {
+    json.city = {
+      ...cityDoc,
+      id: cityDoc._id ? cityDoc._id.toString() : (cityDoc.id || cityDoc._id),
+    };
+    json.cityId = cityDoc._id ? cityDoc._id.toString() : (cityDoc.id ? String(cityDoc.id) : String(cityDoc));
+  }
 
-    res.json(json);
-  }),
-);
+  res.json(json);
+});
+
+publicRouter.get('/countries/:countrySlug-cities/:citySlug/:slug', getLocationDetailHandler);
+publicRouter.get('/countries/:countrySlug/cities/:citySlug/:slug', getLocationDetailHandler);
+publicRouter.get('/countries/:countrySlug-cities/:citySlug/pujas/:slug', getLocationDetailHandler);
+publicRouter.get('/locations/:slug', getLocationDetailHandler);
 
 publicRouter.get(
   '/locations',

@@ -26,6 +26,11 @@ interface MigrationResult {
 
 const base64Regex = /data:image\/[^"'\s<>)]+/gi;
 
+function optimizeCloudinaryUrl(url: string, width?: number): string {
+  if (!url || !url.includes('/upload/')) return url;
+  const params = width ? `f_auto,q_auto,w_${width}` : 'f_auto,q_auto';
+  return url.replace('/upload/', `/upload/${params}/`);
+}
 async function uploadBase64Images(node: any, docName: string, docId: string, collectionName: string, results: MigrationResult[]): Promise<{ node: any; changed: boolean }> {
   let changed = false;
 
@@ -52,10 +57,10 @@ async function uploadBase64Images(node: any, docName: string, docId: string, col
                 folder: 'namanpuja-migrated',
                 public_id: publicId,
               });
-              console.log(`      ✅ Uploaded → ${uploadResult.secure_url}`);
-              newStr = newStr.replace(rawMatch, uploadResult.secure_url);
-              results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, newUrl: uploadResult.secure_url, status: 'success' });
-              changed = true;
+              const optimizedUrl = optimizeCloudinaryUrl(uploadResult.secure_url);
+              console.log(`      ✅ Uploaded → ${optimizedUrl}`);
+              newStr = newStr.replace(rawMatch, optimizedUrl);
+              results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, newUrl: optimizedUrl, status: 'success' }); changed = true;
             } catch (err: any) {
               console.error(`      ❌ Failed upload for ${path}:`, err.message);
               results.push({ collection: collectionName, id: docId, name: docName, field: path, oldSizeKB, status: 'error', error: err.message });
