@@ -10,6 +10,7 @@ import { toSlug, pujaLocationSlug } from '../utils/slug.js';
 import { generateAndSaveSitemap } from '../utils/sitemap.js';
 import { fireDeployHook } from '../utils/deployHook.js';
 
+import mongoose from 'mongoose';
 import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
@@ -18,6 +19,7 @@ import { PujaLocation } from '../models/PujaLocation.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 import { Blog } from '../models/Blog.js';
+import { dropLegacySingleSlugIndexes } from '../config/db.js';
 
 export const adminRouter = Router();
 
@@ -354,11 +356,36 @@ adminRouter.use(
           if (upsertData[key] === undefined) delete upsertData[key];
         }
 
-        await PujaLocation.findOneAndUpdate(
-          { pujaId: targetPujaId, cityId: cityDoc._id },
-          upsertData,
-          { upsert: true, new: true },
-        );
+        try {
+          await PujaLocation.findOneAndUpdate(
+            { pujaId: targetPujaId, cityId: cityDoc._id },
+            upsertData,
+            { upsert: true, new: true },
+          );
+        } catch (locErr: any) {
+          if (locErr.code === 11000) {
+            const db = mongoose.connection.db;
+            if (db) await dropLegacySingleSlugIndexes(db);
+            const existingLoc = await PujaLocation.findOne({
+              $or: [
+                { pujaId: targetPujaId, cityId: cityDoc._id },
+                { slug: upsertData.slug, cityId: cityDoc._id },
+              ],
+            });
+            if (existingLoc) {
+              await PujaLocation.findByIdAndUpdate(existingLoc._id, { $set: upsertData });
+            } else {
+              await PujaLocation.findOneAndUpdate(
+                { pujaId: targetPujaId, cityId: cityDoc._id },
+                upsertData,
+                { upsert: true, new: true },
+              );
+            }
+          } else {
+            // eslint-disable-next-line no-console
+            console.error('PujaLocation write error:', locErr);
+          }
+        }
       }
 
       // Bidirectional sync: if this is a main bhakti page linked to a Puja,

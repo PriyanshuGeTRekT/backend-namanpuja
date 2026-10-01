@@ -5,41 +5,46 @@ import { Puja } from '../models/Puja.js';
 import { PujaLocation } from '../models/PujaLocation.js';
 
 let cachedConnection: typeof mongoose | null = null;
+let indexesSynced = false;
+
+export async function dropLegacySingleSlugIndexes(db: any) {
+  const collections = ['pujas', 'pujalocations'];
+  for (const colName of collections) {
+    try {
+      const col = db.collection(colName);
+      const indexes = await col.indexes();
+      for (const idx of indexes) {
+        const keyFields = Object.keys(idx.key || {});
+        if (keyFields.length === 1 && keyFields[0] === 'slug') {
+          if (idx.unique || idx.name === 'slug_1') {
+            try {
+              await col.dropIndex(idx.name);
+              // eslint-disable-next-line no-console
+              console.log(`✅ Dropped legacy single slug index "${idx.name}" on ${colName}`);
+            } catch (dropErr) {
+              // eslint-disable-next-line no-console
+              console.warn(`Could not drop index "${idx.name}" on ${colName}:`, dropErr);
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignored if collection doesn't exist
+    }
+  }
+}
 
 async function syncDatabaseIndexes() {
   try {
     const db = mongoose.connection.db;
     if (!db) return;
 
-    // 1. Drop legacy global unique slug_1 index on pujas if it exists
-    try {
-      const pujaIndexes = await db.collection('pujas').indexes();
-      const legacySlug = pujaIndexes.find((idx: any) => idx.name === 'slug_1' && idx.unique);
-      if (legacySlug) {
-        await db.collection('pujas').dropIndex('slug_1');
-        // eslint-disable-next-line no-console
-        console.log('✅ Dropped legacy global unique slug_1 index on pujas');
-      }
-    } catch {
-      // Ignored if index doesn't exist
-    }
+    await dropLegacySingleSlugIndexes(db);
 
-    // 2. Drop legacy global unique slug_1 index on pujalocations if it exists
-    try {
-      const locIndexes = await db.collection('pujalocations').indexes();
-      const legacyLocSlug = locIndexes.find((idx: any) => idx.name === 'slug_1' && idx.unique);
-      if (legacyLocSlug) {
-        await db.collection('pujalocations').dropIndex('slug_1');
-        // eslint-disable-next-line no-console
-        console.log('✅ Dropped legacy global unique slug_1 index on pujalocations');
-      }
-    } catch {
-      // Ignored if index doesn't exist
-    }
-
-    // 3. Sync indexes with updated schemas
+    // Sync indexes with updated schemas
     await Puja.syncIndexes();
     await PujaLocation.syncIndexes();
+    indexesSynced = true;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('⚠️ Index sync warning:', err);
@@ -48,6 +53,9 @@ async function syncDatabaseIndexes() {
 
 export async function connectDB() {
   if (mongoose.connection.readyState === 1) {
+    if (!indexesSynced) {
+      await syncDatabaseIndexes();
+    }
     return mongoose;
   }
 

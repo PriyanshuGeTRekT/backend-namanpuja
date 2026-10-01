@@ -9,10 +9,11 @@
  *   - DELETE /:id     
  */
 import { Router, type Request, type Response } from 'express';
-import type { Model } from 'mongoose';
+import mongoose, { type Model } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { v2 as cloudinary } from 'cloudinary';
+import { dropLegacySingleSlugIndexes } from '../config/db.js';
 
 // Configure cloudinary for inline base64 uploads
 cloudinary.config({
@@ -253,8 +254,24 @@ export function createCrudRouter(opts: CrudOptions): Router {
           row = await model.findByIdAndUpdate(existingDoc._id, { $set: data }, { new: true });
           isActualCreate = false;
         } else {
-          row = await new model(data).save();
-          isActualCreate = true;
+          try {
+            row = await new model(data).save();
+            isActualCreate = true;
+          } catch (err: any) {
+            if (err.code === 11000) {
+              const db = mongoose.connection.db;
+              if (db) await dropLegacySingleSlugIndexes(db);
+              const retryDoc = await model.findOne(filter);
+              if (retryDoc) {
+                row = await model.findByIdAndUpdate(retryDoc._id, { $set: data }, { new: true });
+              } else {
+                row = await new model(data).save();
+              }
+              isActualCreate = false;
+            } else {
+              throw err;
+            }
+          }
         }
       } else if (resource === 'puja-pages' && data.bhaktiType !== 'location' && data.slug) {
         const filter: Record<string, any> = {
@@ -266,8 +283,24 @@ export function createCrudRouter(opts: CrudOptions): Router {
           row = await model.findByIdAndUpdate(existingDoc._id, { $set: data }, { new: true });
           isActualCreate = false;
         } else {
-          row = await new model(data).save();
-          isActualCreate = true;
+          try {
+            row = await new model(data).save();
+            isActualCreate = true;
+          } catch (err: any) {
+            if (err.code === 11000) {
+              const db = mongoose.connection.db;
+              if (db) await dropLegacySingleSlugIndexes(db);
+              const retryDoc = await model.findOne(filter);
+              if (retryDoc) {
+                row = await model.findByIdAndUpdate(retryDoc._id, { $set: data }, { new: true });
+              } else {
+                row = await new model(data).save();
+              }
+              isActualCreate = false;
+            } else {
+              throw err;
+            }
+          }
         }
       } else if (opts.upsertBy && data[opts.upsertBy]) {
         const filter = { [opts.upsertBy]: data[opts.upsertBy] };
