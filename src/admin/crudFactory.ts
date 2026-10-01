@@ -103,6 +103,24 @@ function serializeDoc(doc: any, getTransform?: (d: Record<string, any>) => Recor
   if (raw && raw._id && !raw.id) {
     raw.id = raw._id.toString();
   }
+
+  // Handle any ObjectId or populated reference fields so react-admin can use ReferenceField
+  for (const key of Object.keys(raw)) {
+    const val = raw[key];
+    if (val && typeof val === 'object') {
+      if (val._bsontype === 'ObjectID' || val.constructor?.name === 'ObjectId') {
+        raw[key] = val.toString();
+      } else if (val._id) {
+        if (!val.id) val.id = val._id.toString();
+        if (key.endsWith('Id') && key.length > 2) {
+          const alias = key.slice(0, -2);
+          if (!raw[alias]) raw[alias] = { ...val };
+          raw[key] = val._id.toString();
+        }
+      }
+    }
+  }
+
   return getTransform ? getTransform(raw) : raw;
 }
 
@@ -140,6 +158,14 @@ export function createCrudRouter(opts: CrudOptions): Router {
               }))
             );
           }
+        } else if (key.endsWith('_gte')) {
+          // Date range: createdAt_gte => { createdAt: { $gte: date } }
+          const field = key.slice(0, -4);
+          where[field] = { ...(where[field] as any || {}), $gte: new Date(String(value)) };
+        } else if (key.endsWith('_lte')) {
+          // Date range: createdAt_lte => { createdAt: { $lte: date } }
+          const field = key.slice(0, -4);
+          where[field] = { ...(where[field] as any || {}), $lte: new Date(String(value)) };
         } else if (Array.isArray(value)) {
           where[key] = { $in: value };
         } else {

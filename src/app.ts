@@ -29,6 +29,14 @@ export function createApp() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://checkout.razorpay.com', 'https://www.googletagmanager.com', 'https://www.google-analytics.com'],
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          imgSrc: ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com', 'https://www.google-analytics.com', 'https://www.googletagmanager.com'],
+          connectSrc: ["'self'", 'https://api.namanpuja.com', 'https://checkout.razorpay.com', 'https://www.google-analytics.com', 'https://analytics.google.com', 'https://www.googletagmanager.com'],
+          frameSrc: ["'self'", 'https://checkout.razorpay.com'],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
           frameAncestors: ["'self'"],
         },
       },
@@ -41,6 +49,7 @@ export function createApp() {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://www.googletagmanager.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://res.cloudinary.com https://www.google-analytics.com https://www.googletagmanager.com; connect-src 'self' https://api.namanpuja.com https://checkout.razorpay.com https://www.google-analytics.com https://analytics.google.com https://www.googletagmanager.com; frame-src 'self' https://checkout.razorpay.com; object-src 'none'; base-uri 'self'; frame-ancestors 'self';");
     res.setHeader('Access-Control-Expose-Headers', 'Content-Range, X-Total-Count');
     next();
   });

@@ -300,7 +300,7 @@ export async function buildSitemapXml(): Promise<string> {
         continue;
       }
 
-      const mockSlug = pujaLocationSlug(puja.name, city.name, city.state);
+      const mockSlug = puja.slug ? puja.slug.toLowerCase().trim() : toSlug(puja.name);
       const lastmodDate = formatLastmod(puja.updatedAt || city.updatedAt || today);
 
       addUrl(

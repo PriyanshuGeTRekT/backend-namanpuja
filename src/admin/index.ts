@@ -107,7 +107,7 @@ adminRouter.use(
     resource: 'cities',
     model: City,
     searchableFields: ['name', 'slug', 'state'],
-    populate: ['country'],
+    populate: ['countryId'],
     defaultOrderBy: { sortOrder: 1 },
     beforeWrite: (data) => {
       if (data.name && !data.slug) data.slug = toSlug(String(data.name));
@@ -149,6 +149,13 @@ adminRouter.use(
       if (data.categoryId === '' || data.categoryId === null) {
         delete data.categoryId;
       }
+      // Normalize image fields: heroImage and featuredImage are the same thing.
+      // Whichever is set, copy it to the other so both admin panel and frontend work.
+      if (data.heroImage && !data.featuredImage) {
+        data.featuredImage = data.heroImage;
+      } else if (data.featuredImage && !data.heroImage) {
+        data.heroImage = data.featuredImage;
+      }
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);
       }
@@ -179,7 +186,9 @@ adminRouter.use(
       if (!data.name && data.title) {
         data.name = data.title;
       }
-      if (data.name && !data.slug) data.slug = toSlug(String(data.name));
+      if (data.bhaktiType !== 'location' && data.name && !data.slug) {
+        data.slug = toSlug(String(data.name));
+      }
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);
       } else {
@@ -195,6 +204,12 @@ adminRouter.use(
       }
       if (data.categoryId === '' || data.categoryId === null) {
         delete data.categoryId;
+      }
+      // Normalize image fields: heroImage and featuredImage are the same thing.
+      if (data.heroImage && !data.featuredImage) {
+        data.featuredImage = data.heroImage;
+      } else if (data.featuredImage && !data.heroImage) {
+        data.heroImage = data.featuredImage;
       }
       
       if (data.bhaktiType === 'location' && data.country && data.city) {
@@ -261,6 +276,8 @@ adminRouter.use(
       seoDescription: doc.seoDescription ?? doc.metaDescription ?? '',
       seoKeywords: doc.seoKeywords ?? doc.keywords ?? [],
       blocks: Array.isArray(doc.blocks) ? doc.blocks : [],
+      // Normalize image fields so admin form shows the image correctly
+      featuredImage: doc.featuredImage || doc.heroImage || '',
     }),
     afterWrite: async (doc, _ctx) => {
       fireDeployHook('puja-pages');
@@ -314,7 +331,7 @@ adminRouter.use(
           cityId: cityDoc._id,
           cityName,
           countryName,
-          slug: existing?.slug || locSlug,
+          slug: existing?.slug || doc.slug || locSlug,
           h1: `${doc.name || doc.title} in ${cityName}`,
           published: doc.status === 'published',
           basePrice: doc.basePrice !== undefined && doc.basePrice !== '' ? Number(doc.basePrice) : (existing?.basePrice ?? 0),
@@ -343,6 +360,35 @@ adminRouter.use(
           { upsert: true, new: true },
         );
       }
+
+      // Bidirectional sync: if this is a main bhakti page linked to a Puja,
+      // push the updated image and pricing back to the source Puja so the
+      // pujas listing page always stays consistent.
+      if (doc.bhaktiType === 'main') {
+        const sourcePujaName = doc.title || doc.name;
+        if (sourcePujaName) {
+          const updateFields: Record<string, any> = {};
+          const img = doc.featuredImage || doc.heroImage || '';
+          if (img) {
+            updateFields.featuredImage = img;
+            updateFields.heroImage = img;
+          }
+          if (doc.onlinePrice !== undefined && doc.onlinePrice !== '') {
+            updateFields.onlinePrice = Number(doc.onlinePrice);
+          }
+          if (doc.offlinePrice !== undefined && doc.offlinePrice !== '') {
+            updateFields.offlinePrice = Number(doc.offlinePrice);
+          }
+          if (Object.keys(updateFields).length > 0) {
+            // Update by name — bhaktiType=main pujas are uniquely identified by name
+            await Puja.updateMany(
+              { name: sourcePujaName, bhaktiType: { $ne: 'location' } },
+              { $set: updateFields },
+            );
+          }
+        }
+      }
+
       await generateAndSaveSitemap();
     }
   }),
@@ -354,7 +400,7 @@ adminRouter.use(
     resource: 'puja-locations',
     model: PujaLocation,
     searchableFields: ['slug', 'h1', 'metaTitle', 'cityName', 'countryName'],
-    populate: ['puja', 'city'],
+    populate: ['pujaId', 'cityId'],
     beforeWrite: async (data) => {
       if (data.onlinePrice !== undefined && data.onlinePrice !== '') {
         data.onlinePrice = Number(data.onlinePrice);

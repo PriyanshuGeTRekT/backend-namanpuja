@@ -14,6 +14,8 @@ const duplicateSlugsToDelete = [
   'rudrabhisheka-puja-in-san-jose-california',
   // 5. Irving - duplicate with stutter phrase ("in-irving-in-irving-texas")
   'ganesh-puja-in-irving-in-irving-texas',
+  // 6. Malformed San Jose location
+  'san-jose-in-san-jose-california',
 ];
 
 async function main() {

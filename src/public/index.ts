@@ -216,6 +216,9 @@ const pujas = await Puja.find(filter)
     const formatted = pujas.map((p: any) => ({
       ...p,
       id: p._id ? p._id.toString() : p.id,
+      // Normalize image: old records stored it in heroImage, new ones use featuredImage
+      featuredImage: p.featuredImage || p.heroImage || '',
+      heroImage: p.featuredImage || p.heroImage || '',
       category: p.category && typeof p.category === 'object'
         ? {
             ...p.category,
