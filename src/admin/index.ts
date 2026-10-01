@@ -182,13 +182,12 @@ adminRouter.use(
     searchableFields: ['name', 'slug', 'deity', 'title', 'bhaktiType', 'country', 'city'],
     populate: ['category'],
     defaultOrderBy: { sortOrder: 1 },
-    upsertBy: 'slug',
     beforeWrite: async (data, _ctx) => {
       if (!data.name && data.title) {
         data.name = data.title;
       }
-      if (data.bhaktiType !== 'location' && data.name && !data.slug) {
-        data.slug = toSlug(String(data.name));
+      if (!data.slug && (data.name || data.title)) {
+        data.slug = toSlug(String(data.name || data.title));
       }
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);

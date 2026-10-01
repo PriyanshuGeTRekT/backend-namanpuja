@@ -332,10 +332,32 @@ publicRouter.get(
 
 
 const getLocationDetailHandler = asyncHandler(async (req: Request, res: Response) => {
-  const location = await PujaLocation.findOne({ slug: toSlug(req.params.slug), published: true }).populate([
-    { path: 'pujaId', populate: { path: 'category' } },
-    { path: 'cityId', populate: { path: 'country' } },
-  ]);
+  const reqSlug = toSlug(req.params.slug);
+  const citySlug = req.params.citySlug ? toSlug(req.params.citySlug) : undefined;
+
+  let location = null;
+
+  if (citySlug) {
+    const city = await City.findOne({ slug: citySlug });
+    if (city) {
+      location = await PujaLocation.findOne({
+        slug: reqSlug,
+        cityId: city._id,
+        published: true,
+      }).populate([
+        { path: 'pujaId', populate: { path: 'category' } },
+        { path: 'cityId', populate: { path: 'country' } },
+      ]);
+    }
+  }
+
+  if (!location) {
+    location = await PujaLocation.findOne({ slug: reqSlug, published: true }).populate([
+      { path: 'pujaId', populate: { path: 'category' } },
+      { path: 'cityId', populate: { path: 'country' } },
+    ]);
+  }
+
   if (!location) throw ApiError.notFound('Page not found');
 
   PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);

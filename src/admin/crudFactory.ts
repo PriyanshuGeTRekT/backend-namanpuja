@@ -241,11 +241,37 @@ export function createCrudRouter(opts: CrudOptions): Router {
       let row: any;
       let isActualCreate = true;
 
-      if (opts.upsertBy && data[opts.upsertBy]) {
-        // Upsert by the specified field (e.g. slug) — update existing doc if found, create otherwise.
+      if (resource === 'puja-pages' && data.bhaktiType === 'location' && data.slug && (data.city || data.cityName)) {
+        const cityVal = data.city || data.cityName;
+        const filter: Record<string, any> = {
+          slug: data.slug,
+          bhaktiType: 'location',
+          $or: [{ city: cityVal }, { cityName: cityVal }],
+        };
+        const existingDoc = await model.findOne(filter);
+        if (existingDoc) {
+          row = await model.findByIdAndUpdate(existingDoc._id, { $set: data }, { new: true });
+          isActualCreate = false;
+        } else {
+          row = await new model(data).save();
+          isActualCreate = true;
+        }
+      } else if (resource === 'puja-pages' && data.bhaktiType !== 'location' && data.slug) {
+        const filter: Record<string, any> = {
+          slug: data.slug,
+          bhaktiType: { $ne: 'location' },
+        };
+        const existingDoc = await model.findOne(filter);
+        if (existingDoc) {
+          row = await model.findByIdAndUpdate(existingDoc._id, { $set: data }, { new: true });
+          isActualCreate = false;
+        } else {
+          row = await new model(data).save();
+          isActualCreate = true;
+        }
+      } else if (opts.upsertBy && data[opts.upsertBy]) {
         const filter = { [opts.upsertBy]: data[opts.upsertBy] };
         row = await model.findOneAndUpdate(filter, { $set: data }, { upsert: true, new: true, setDefaultsOnInsert: true });
-        // Determine if this was an insert or an update
         const wasInsert = row && row.__v === 0 && row.createdAt && (Date.now() - new Date(row.createdAt).getTime() < 5000);
         isActualCreate = Boolean(wasInsert);
       } else {

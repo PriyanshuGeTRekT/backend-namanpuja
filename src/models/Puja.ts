@@ -4,7 +4,7 @@ const pujaSchema = new mongoose.Schema(
   {
     categoryId: { type: mongoose.Schema.Types.ObjectId, ref: 'PujaCategory' },
     name: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
+    slug: { type: String, required: true },
     deity: { type: String },
     subtitle: { type: String },
     serviceType: { type: String, default: 'BOTH' },
@@ -33,6 +33,16 @@ const pujaSchema = new mongoose.Schema(
 pujaSchema.index({ enabled: 1, isFeatured: 1, sortOrder: 1 });
 pujaSchema.index({ categoryId: 1 });
 pujaSchema.index({ enabled: 1, bhaktiType: 1, isFeatured: -1, sortOrder: 1 });
+// Unique per slug for main master pujas
+pujaSchema.index(
+  { slug: 1 },
+  { unique: true, partialFilterExpression: { bhaktiType: { $ne: 'location' } } }
+);
+// Unique per slug + city for location-specific custom pages (allows same slug across different cities)
+pujaSchema.index(
+  { slug: 1, city: 1, country: 1 },
+  { unique: true, partialFilterExpression: { bhaktiType: 'location' } }
+);
 
 pujaSchema.virtual('category', {
   ref: 'PujaCategory',

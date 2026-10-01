@@ -6,7 +6,7 @@ const pujaLocationSchema = new mongoose.Schema(
     cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'City' },
     cityName: { type: String },
     countryName: { type: String },
-    slug: { type: String, required: true, unique: true },
+    slug: { type: String, required: true },
     h1: { type: String },
     heroTagline: { type: String },
     intro: { type: String },
@@ -41,6 +41,9 @@ const pujaLocationSchema = new mongoose.Schema(
 pujaLocationSchema.index({ cityId: 1, published: 1 });
 pujaLocationSchema.index({ pujaId: 1, published: 1 });
 pujaLocationSchema.index({ published: 1 });
+// Unique per city: slug is unique inside the city only, allowing the same slug across different cities
+pujaLocationSchema.index({ slug: 1, cityId: 1 }, { unique: true });
+pujaLocationSchema.index({ pujaId: 1, cityId: 1 }, { unique: true });
 
 pujaLocationSchema.virtual('puja', {
   ref: 'Puja',
