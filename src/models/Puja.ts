@@ -36,7 +36,7 @@ pujaSchema.index({ enabled: 1, bhaktiType: 1, isFeatured: -1, sortOrder: 1 });
 // Unique per slug for main master pujas
 pujaSchema.index(
   { slug: 1 },
-  { unique: true, partialFilterExpression: { bhaktiType: { $ne: 'location' } } }
+  { unique: true, partialFilterExpression: { bhaktiType: 'main' } }
 );
 // Unique per slug + city for location-specific custom pages (allows same slug across different cities)
 pujaSchema.index(

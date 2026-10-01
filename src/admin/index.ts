@@ -188,8 +188,9 @@ adminRouter.use(
       if (!data.name && data.title) {
         data.name = data.title;
       }
-      if (!data.slug && (data.name || data.title)) {
-        data.slug = toSlug(String(data.name || data.title));
+      if (data.name || data.title || data.slug) {
+        const rawSlug = data.slug ? String(data.slug) : String(data.name || data.title);
+        data.slug = toSlug(rawSlug).replace(/-\d+$/, '');
       }
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);
@@ -333,7 +334,7 @@ adminRouter.use(
           cityId: cityDoc._id,
           cityName,
           countryName,
-          slug: existing?.slug || doc.slug || locSlug,
+          slug: (doc.slug || existing?.slug || locSlug).replace(/-\d+$/, ''),
           h1: `${doc.name || doc.title} in ${cityName}`,
           published: doc.status === 'published',
           basePrice: doc.basePrice !== undefined && doc.basePrice !== '' ? Number(doc.basePrice) : (existing?.basePrice ?? 0),
