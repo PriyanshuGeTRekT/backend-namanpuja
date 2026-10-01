@@ -5,7 +5,6 @@ import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
-import { PujaLocation } from '../models/PujaLocation.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 
@@ -260,27 +259,63 @@ export async function seedInitialData() {
         bhaktiType: 'main',
       });
 
-      // 6. Seed Puja Locations
-      await PujaLocation.create({
-        pujaId: ganeshPuja._id,
+      // 6. Seed Puja Locations (as Puja documents with bhaktiType: 'location')
+      await Puja.create({
+        name: 'Ganesh Puja',
+        title: 'Ganesh Puja in Delhi',
+        h1: 'Ganesh Puja in Delhi',
+        targetPujaId: ganeshPuja._id,
         cityId: delhi._id,
+        city: 'Delhi',
+        cityName: 'Delhi',
+        citySlug: 'delhi',
+        country: 'India',
+        countryName: 'India',
+        countrySlug: 'india',
         slug: 'ganesh-puja-in-delhi',
         basePrice: 2500,
+        onlinePrice: 2500,
         published: true,
+        status: 'published',
+        bhaktiType: 'location',
       });
-      await PujaLocation.create({
-        pujaId: ganeshPuja._id,
+      await Puja.create({
+        name: 'Ganesh Puja',
+        title: 'Ganesh Puja in Mumbai',
+        h1: 'Ganesh Puja in Mumbai',
+        targetPujaId: ganeshPuja._id,
         cityId: mumbai._id,
+        city: 'Mumbai',
+        cityName: 'Mumbai',
+        citySlug: 'mumbai',
+        country: 'India',
+        countryName: 'India',
+        countrySlug: 'india',
         slug: 'ganesh-puja-in-mumbai',
         basePrice: 2700,
+        onlinePrice: 2700,
         published: true,
+        status: 'published',
+        bhaktiType: 'location',
       });
-      await PujaLocation.create({
-        pujaId: satyanarayanPuja._id,
+      await Puja.create({
+        name: 'Satyanarayan Puja',
+        title: 'Satyanarayan Puja in Delhi',
+        h1: 'Satyanarayan Puja in Delhi',
+        targetPujaId: satyanarayanPuja._id,
         cityId: delhi._id,
+        city: 'Delhi',
+        cityName: 'Delhi',
+        citySlug: 'delhi',
+        country: 'India',
+        countryName: 'India',
+        countrySlug: 'india',
         slug: 'satyanarayan-puja-in-delhi',
         basePrice: 3100,
+        onlinePrice: 3100,
         published: true,
+        status: 'published',
+        bhaktiType: 'location',
       });
 
       // 7. Seed Temple

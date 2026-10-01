@@ -13,7 +13,6 @@ import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
-import { PujaLocation } from '../models/PujaLocation.js';
 import { User } from '../models/User.js';
 import { Blog } from '../models/Blog.js';
 import { buildSitemapXml } from '../utils/sitemap.js';
@@ -160,16 +159,24 @@ const getCityDetailHandler = asyncHandler(async (req: Request, res: Response) =>
       : undefined,
   };
 
-  const locations = await PujaLocation.find({
-    cityId: (city as any)._id,
+  const locations = await Puja.find({
+    bhaktiType: 'location',
+    $or: [
+      { cityId: (city as any)._id },
+      { city: (city as any).name },
+      { citySlug: (city as any).slug },
+    ],
     published: { $ne: false },
+    enabled: { $ne: false },
   })
+    .populate({ path: 'targetPujaId', populate: { path: 'categoryId' } })
     .populate({ path: 'pujaId', populate: { path: 'categoryId' } })
-    .sort({ createdAt: -1 });
+    .populate('categoryId')
+    .sort({ createdAt: -1 })
+    .lean();
 
-  const formattedLocations = locations.map((locDoc: any) => {
-    const l = locDoc.toJSON ? locDoc.toJSON() : locDoc;
-    const pujaObj = l.pujaId || l.puja;
+  const formattedLocations = locations.map((l: any) => {
+    const pujaObj = l.targetPujaId || l.pujaId || l.puja;
     const pIdStr = pujaObj?._id
       ? pujaObj._id.toString()
       : (pujaObj?.id ? String(pujaObj.id) : (typeof l.pujaId === 'string' ? l.pujaId : undefined));
@@ -332,38 +339,54 @@ publicRouter.get(
 
 
 const getLocationDetailHandler = asyncHandler(async (req: Request, res: Response) => {
-  const reqSlug = toSlug(req.params.slug);
+  const reqSlug = toSlug(req.params.slug).replace(/-\d+$/, '');
   const citySlug = req.params.citySlug ? toSlug(req.params.citySlug) : undefined;
 
-  let location = null;
+  let location: any = null;
 
   if (citySlug) {
-    const city = await City.findOne({ slug: citySlug });
+    const city = await City.findOne({
+      $or: [
+        { slug: citySlug },
+        { name: new RegExp(`^${citySlug.replace(/-/g, ' ')}$`, 'i') },
+      ],
+    });
     if (city) {
-      location = await PujaLocation.findOne({
+      location = await Puja.findOne({
         slug: reqSlug,
-        cityId: city._id,
-        published: true,
+        bhaktiType: 'location',
+        $or: [{ cityId: city._id }, { city: city.name }, { citySlug: city.slug }],
+        published: { $ne: false },
+        enabled: { $ne: false },
       }).populate([
-        { path: 'pujaId', populate: { path: 'category' } },
-        { path: 'cityId', populate: { path: 'country' } },
+        { path: 'targetPujaId', populate: { path: 'categoryId' } },
+        { path: 'pujaId', populate: { path: 'categoryId' } },
+        { path: 'categoryId' },
+        { path: 'cityId', populate: { path: 'countryId' } },
       ]);
     }
   }
 
   if (!location) {
-    location = await PujaLocation.findOne({ slug: reqSlug, published: true }).populate([
-      { path: 'pujaId', populate: { path: 'category' } },
-      { path: 'cityId', populate: { path: 'country' } },
+    location = await Puja.findOne({
+      slug: reqSlug,
+      bhaktiType: 'location',
+      published: { $ne: false },
+      enabled: { $ne: false },
+    }).populate([
+      { path: 'targetPujaId', populate: { path: 'categoryId' } },
+      { path: 'pujaId', populate: { path: 'categoryId' } },
+      { path: 'categoryId' },
+      { path: 'cityId', populate: { path: 'countryId' } },
     ]);
   }
 
   if (!location) throw ApiError.notFound('Page not found');
 
-  PujaLocation.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
+  Puja.updateOne({ _id: location._id }, { $inc: { views: 1 } }).catch(() => undefined);
 
-  const json = location.toJSON() as any;
-  const pujaDoc = json.pujaId || json.puja;
+  const json = location.toJSON ? location.toJSON() : { ...location };
+  const pujaDoc = json.targetPujaId || json.pujaId || json.puja;
   const cityDoc = json.cityId || json.city;
 
   if (pujaDoc && typeof pujaDoc === 'object') {
@@ -382,6 +405,10 @@ const getLocationDetailHandler = asyncHandler(async (req: Request, res: Response
     json.cityId = cityDoc._id ? cityDoc._id.toString() : (cityDoc.id ? String(cityDoc.id) : String(cityDoc));
   }
 
+  // Ensure blocks and benefits exist
+  json.blocks = Array.isArray(json.blocks) ? json.blocks : [];
+  json.sections = Array.isArray(json.sections) ? json.sections : [];
+
   res.json(json);
 });
 
@@ -393,9 +420,10 @@ publicRouter.get('/locations/:slug', getLocationDetailHandler);
 publicRouter.get(
   '/locations',
   asyncHandler(async (_req, res: Response) => {
-    const locations = await PujaLocation.find({ published: true })
-      .select('slug updatedAt cityId')
-      .populate({ path: 'city', select: 'slug country', populate: { path: 'country', select: 'slug' } });
+    const locations = await Puja.find({ bhaktiType: 'location', published: { $ne: false }, enabled: { $ne: false } })
+      .select('slug updatedAt city citySlug country countrySlug cityId')
+      .populate({ path: 'cityId', select: 'slug countryId', populate: { path: 'countryId', select: 'slug' } })
+      .lean();
     res.json(locations);
   }),
 );

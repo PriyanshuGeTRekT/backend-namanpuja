@@ -15,7 +15,6 @@ import { Country } from '../models/Country.js';
 import { City } from '../models/City.js';
 import { PujaCategory } from '../models/PujaCategory.js';
 import { Puja } from '../models/Puja.js';
-import { PujaLocation } from '../models/PujaLocation.js';
 import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 import { Blog } from '../models/Blog.js';
@@ -284,110 +283,6 @@ adminRouter.use(
     }),
     afterWrite: async (doc, _ctx) => {
       fireDeployHook('puja-pages');
-      if (doc.bhaktiType === 'location' && doc.country && doc.city) {
-        const cityName = String(doc.city).trim();
-        const countryName = String(doc.country).trim();
-        const citySlug = doc.citySlug ? String(doc.citySlug).trim() : toSlug(cityName);
-        const countrySlug = doc.countrySlug ? String(doc.countrySlug).trim() : toSlug(countryName);
-
-        const countryDoc = await Country.findOne({ $or: [{ slug: countrySlug }, { name: countryName }] });
-        const cityDoc = await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc?._id });
-        if (!cityDoc) return;
-
-        const cityState = (cityDoc as any).state || '';
-        const targetPujaId = doc.targetPujaId || doc.pujaId || doc._id;
-
-        const blocks: Array<{ type: string; value: any; bgColor?: string }> = Array.isArray(doc.blocks) ? doc.blocks : [];
-        
-        const sections: Array<{ heading: string; body: string }> = [];
-        let firstImageUrl = '';
-        for (let i = 0; i < blocks.length; i++) {
-          const b = blocks[i];
-          if (b.type === 'heading' && typeof b.value === 'string' && b.value.trim()) {
-            const next = blocks[i + 1];
-            const body = next?.type === 'paragraph' && typeof next.value === 'string' ? next.value : '';
-            sections.push({ heading: b.value.trim(), body });
-            if (body) i++;
-          } else if (b.type === 'paragraph' && typeof b.value === 'string' && b.value.trim()) {
-            sections.push({ heading: '', body: b.value.trim() });
-          }
-          if (b.type === 'image' && typeof b.value === 'string' && b.value && !firstImageUrl) {
-            firstImageUrl = b.value;
-          }
-        }
-
-        const existing = await PujaLocation.findOne({ pujaId: targetPujaId, cityId: cityDoc._id }).lean() as Record<string, any> | null;
-
-        const pick = <T,>(newVal: T | undefined | null, existingVal: T | undefined | null): T | undefined | null => {
-          if (newVal !== undefined && newVal !== null && newVal !== '') return newVal;
-          return existingVal ?? null;
-        };
-        const pickArray = (newVal: any, existingVal: any) => {
-          if (Array.isArray(newVal) && newVal.length > 0) return newVal;
-          return existingVal ?? undefined;
-        };
-
-        const locSlug = pujaLocationSlug(doc.name || doc.title, cityName, cityState);
-
-        const upsertData: Record<string, any> = {
-          pujaId: targetPujaId,
-          cityId: cityDoc._id,
-          cityName,
-          countryName,
-          slug: (doc.slug || existing?.slug || locSlug).replace(/-\d+$/, ''),
-          h1: `${doc.name || doc.title} in ${cityName}`,
-          published: doc.status === 'published',
-          basePrice: doc.basePrice !== undefined && doc.basePrice !== '' ? Number(doc.basePrice) : (existing?.basePrice ?? 0),
-          onlinePrice: doc.onlinePrice !== undefined && doc.onlinePrice !== '' ? Number(doc.onlinePrice) : existing?.onlinePrice,
-          offlinePrice: doc.offlinePrice !== undefined && doc.offlinePrice !== '' ? Number(doc.offlinePrice) : existing?.offlinePrice,
-          intro: pick(doc.excerpt, existing?.intro),
-          blocks: Array.isArray(doc.blocks) ? doc.blocks : (existing?.blocks ?? []),
-          sections: sections,
-          featuredImage: doc.featuredImage ?? existing?.featuredImage ?? '',
-          faqs: doc.faqs && doc.faqs.length ? doc.faqs : (existing?.faqs ?? []),
-          metaTitle: pick(doc.seoTitle, existing?.metaTitle),
-          metaDescription: pick(doc.seoDescription, existing?.metaDescription),
-          keywords: pickArray(doc.seoKeywords, existing?.keywords),
-          ogImage: firstImageUrl || doc.featuredImage || existing?.ogImage || '',
-          breadcrumb: existing?.breadcrumb || ['Home', countryName, cityName, doc.name || doc.title],
-          imageAlt: pick(doc.title || doc.name, existing?.imageAlt),
-        };
-
-        for (const key of Object.keys(upsertData)) {
-          if (upsertData[key] === undefined) delete upsertData[key];
-        }
-
-        try {
-          await PujaLocation.findOneAndUpdate(
-            { pujaId: targetPujaId, cityId: cityDoc._id },
-            upsertData,
-            { upsert: true, new: true },
-          );
-        } catch (locErr: any) {
-          if (locErr.code === 11000) {
-            const db = mongoose.connection.db;
-            if (db) await dropLegacySingleSlugIndexes(db);
-            const existingLoc = await PujaLocation.findOne({
-              $or: [
-                { pujaId: targetPujaId, cityId: cityDoc._id },
-                { slug: upsertData.slug, cityId: cityDoc._id },
-              ],
-            });
-            if (existingLoc) {
-              await PujaLocation.findByIdAndUpdate(existingLoc._id, { $set: upsertData });
-            } else {
-              await PujaLocation.findOneAndUpdate(
-                { pujaId: targetPujaId, cityId: cityDoc._id },
-                upsertData,
-                { upsert: true, new: true },
-              );
-            }
-          } else {
-            // eslint-disable-next-line no-console
-            console.error('PujaLocation write error:', locErr);
-          }
-        }
-      }
 
       // Bidirectional sync: if this is a main bhakti page linked to a Puja,
       // push the updated image and pricing back to the source Puja so the
@@ -418,7 +313,10 @@ adminRouter.use(
       }
 
       await generateAndSaveSitemap();
-    }
+    },
+    afterDelete: () => {
+      fireDeployHook('puja-pages');
+    },
   }),
 );
 
@@ -426,39 +324,20 @@ adminRouter.use(
   '/puja-locations',
   createCrudRouter({
     resource: 'puja-locations',
-    model: PujaLocation,
-    searchableFields: ['slug', 'h1', 'metaTitle', 'cityName', 'countryName'],
-    populate: ['pujaId', 'cityId'],
+    model: Puja,
+    searchableFields: ['name', 'slug', 'title', 'h1', 'city', 'cityName', 'country', 'countryName'],
+    populate: ['categoryId', 'cityId', 'targetPujaId'],
+    defaultOrderBy: { updatedAt: -1 },
     beforeWrite: async (data) => {
+      data.bhaktiType = 'location';
       if (data.onlinePrice !== undefined && data.onlinePrice !== '') {
         data.onlinePrice = Number(data.onlinePrice);
       }
       if (data.offlinePrice !== undefined && data.offlinePrice !== '') {
         data.offlinePrice = Number(data.offlinePrice);
       }
-
-      // Always recompute slug from puja + city — the admin UI shows it read-only,
-      // but we also strip any user-submitted value so the backend is the sole source of truth.
-      if (data.pujaId) {
-        const puja = await Puja.findById(data.pujaId);
-
-        let cName = '';
-        let cState = '';
-        if (data.cityId) {
-          const city = await City.findById(data.cityId);
-          if (city) {
-            cName = city.name;
-            cState = (city as any).state || '';
-          }
-        } else if (data.cityName) {
-          cName = String(data.cityName);
-          cState = data.countryName ? String(data.countryName) : '';
-        }
-
-        if (puja && cName && !data.slug) {
-            data.slug = pujaLocationSlug(puja.name, cName, cState);
-          if (!data.h1) data.h1 = `${puja.name} in ${cName}${cState && !data.cityName ? ', ' + cState : ''}`;
-        }
+      if (data.slug) {
+        data.slug = toSlug(String(data.slug)).replace(/-\d+$/, '');
       }
       return data;
     },

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { Puja } from '../models/Puja.js';
-import { PujaLocation } from '../models/PujaLocation.js';
 import { City } from '../models/City.js';
 import { Country } from '../models/Country.js';
 import { Blog } from '../models/Blog.js';
@@ -77,11 +76,15 @@ export async function buildSitemapXml(): Promise<string> {
     city: { $in: [null, ''] },
   }).select('_id name slug updatedAt').lean();
 
-  // 4. Fetch Puja Locations (real documents)
-  const locations = await PujaLocation.find({ published: { $ne: false } })
+  // 4. Fetch Puja Locations (real location documents in pujas collection)
+  const locations = await Puja.find({
+    bhaktiType: 'location',
+    published: { $ne: false },
+    enabled: { $ne: false },
+  })
     .populate({ path: 'cityId', populate: { path: 'countryId' } })
-    .populate('pujaId', '_id name slug')
-    .select('slug cityId cityName countryName pujaId h1 updatedAt')
+    .populate('targetPujaId', '_id name slug')
+    .select('slug cityId city cityName country countryName targetPujaId pujaId h1 name title updatedAt')
     .lean();
 
   // Helper to extract puja ID from location doc (matching frontend getPujaId logic)
