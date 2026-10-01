@@ -182,24 +182,13 @@ adminRouter.use(
     searchableFields: ['name', 'slug', 'deity', 'title', 'bhaktiType', 'country', 'city'],
     populate: ['category'],
     defaultOrderBy: { sortOrder: 1 },
-    beforeWrite: async (data, ctx) => {
+    upsertBy: 'slug',
+    beforeWrite: async (data, _ctx) => {
       if (!data.name && data.title) {
         data.name = data.title;
       }
       if (data.bhaktiType !== 'location' && data.name && !data.slug) {
         data.slug = toSlug(String(data.name));
-      }
-      // On create, ensure the slug is unique — if it already exists in the DB,
-      // append a numeric suffix until we find a free one.
-      if (ctx.isCreate && data.slug) {
-        const baseSlug = String(data.slug);
-        let candidateSlug = baseSlug;
-        let attempt = 1;
-        while (await Puja.exists({ slug: candidateSlug })) {
-          candidateSlug = `${baseSlug}-${attempt}`;
-          attempt++;
-        }
-        data.slug = candidateSlug;
       }
       if (data.basePrice !== undefined && data.basePrice !== '') {
         data.basePrice = Number(data.basePrice);

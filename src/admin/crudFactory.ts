@@ -83,6 +83,11 @@ interface CrudOptions {
   afterDelete?: (id: string) => Promise<void> | void;
   /** Transform the raw doc before sending it back on GET ONE (for edit-form field-name remapping) */
   getTransform?: (doc: Record<string, any>) => Record<string, any>;
+  /**
+   * When set, POST (create) will upsert by this field instead of always inserting a new document.
+   * e.g. upsertBy: 'slug' — if a document with that slug already exists, it is updated in-place.
+   */
+  upsertBy?: string;
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -232,9 +237,22 @@ export function createCrudRouter(opts: CrudOptions): Router {
       data = await sanitizeBase64Images(data);
       
       if (opts.beforeWrite) data = await opts.beforeWrite(data, { isCreate: true });
-      const row = await new model(data).save();
+
+      let row: any;
+      let isActualCreate = true;
+
+      if (opts.upsertBy && data[opts.upsertBy]) {
+        // Upsert by the specified field (e.g. slug) — update existing doc if found, create otherwise.
+        const filter = { [opts.upsertBy]: data[opts.upsertBy] };
+        row = await model.findOneAndUpdate(filter, { $set: data }, { upsert: true, new: true, setDefaultsOnInsert: true });
+        // Determine if this was an insert or an update
+        const wasInsert = row && row.__v === 0 && row.createdAt && (Date.now() - new Date(row.createdAt).getTime() < 5000);
+        isActualCreate = Boolean(wasInsert);
+      } else {
+        row = await new model(data).save();
+      }
       
-      if (opts.afterWrite) await opts.afterWrite(row, { isCreate: true });
+      if (opts.afterWrite) await opts.afterWrite(row, { isCreate: isActualCreate });
       
       let query = model.findById(row._id);
       for (const p of populate) {
