@@ -2,11 +2,14 @@ import mongoose from 'mongoose';
 import { env } from './env.js';
 import { seedAdminUsers, seedInitialData } from './seed.js';
 import { Puja } from '../models/Puja.js';
-import { deduplicatePujas } from '../scripts/cleanDuplicates.js';
 
 let cachedConnection: typeof mongoose | null = null;
 let indexesSynced = false;
 
+/**
+ * Drops any old single-field or country-based unique slug index on the given collections.
+ * Called on startup once and kept as a fallback in crudFactory on E11000 errors.
+ */
 export async function dropLegacySingleSlugIndexes(db: any) {
   const collections = ['pujas'];
   for (const colName of collections) {
@@ -15,16 +18,25 @@ export async function dropLegacySingleSlugIndexes(db: any) {
       const indexes = await col.indexes();
       for (const idx of indexes) {
         const keyFields = Object.keys(idx.key || {});
+        // Drop any legacy single slug index without bhaktiType: 'main' filter
         if (keyFields.length === 1 && keyFields[0] === 'slug') {
           if (idx.unique || idx.name === 'slug_1') {
+            const hasMainFilter = idx.partialFilterExpression?.bhaktiType === 'main';
+            if (!hasMainFilter) {
+              try {
+                await col.dropIndex(idx.name);
+                console.log(`✅ Dropped legacy single slug index "${idx.name}" on ${colName}`);
+              } catch {}
+            }
+          }
+        }
+        // Drop any legacy unique index that contains country / countryName or 3-field compound
+        if (idx.unique && keyFields.includes('slug')) {
+          if (keyFields.includes('country') || keyFields.includes('countryName') || idx.name === 'slug_1_city_1_country_1') {
             try {
               await col.dropIndex(idx.name);
-              // eslint-disable-next-line no-console
-              console.log(`✅ Dropped legacy single slug index "${idx.name}" on ${colName}`);
-            } catch (dropErr) {
-              // eslint-disable-next-line no-console
-              console.warn(`Could not drop index "${idx.name}" on ${colName}:`, dropErr);
-            }
+              console.log(`✅ Dropped legacy country-based unique slug index "${idx.name}" on ${colName}`);
+            } catch {}
           }
         }
       }
@@ -35,17 +47,18 @@ export async function dropLegacySingleSlugIndexes(db: any) {
 }
 
 async function syncDatabaseIndexes() {
+  if (indexesSynced) return;
   try {
     const db = mongoose.connection.db;
     if (!db) return;
 
+    // Drop any old global or country-based unique indexes
     await dropLegacySingleSlugIndexes(db);
 
-    // Sync indexes with updated schemas
+    // Ensure the compound indexes from Puja schema are applied
     await Puja.syncIndexes();
     indexesSynced = true;
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('⚠️ Index sync warning:', err);
   }
 }
@@ -65,15 +78,10 @@ export async function connectDB() {
       socketTimeoutMS: 45000,
       family: 4,
     });
-    // eslint-disable-next-line no-console
     console.log('✅ MongoDB connected');
 
-    // Drop legacy indexes and sync compound indexes
+    // Sync compound indexes (one-time migration, skipped after first run)
     await syncDatabaseIndexes();
-
-    
-    // Deduplicate any repeated entries in pujas collection
-    await deduplicatePujas();
 
     // Always ensure admin accounts exist (safe upsert, runs in prod too).
     await seedAdminUsers();
@@ -84,7 +92,6 @@ export async function connectDB() {
     }
     return cachedConnection;
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('❌ MongoDB connection error:', err);
     throw err;
   }

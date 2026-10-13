@@ -70,8 +70,13 @@ export async function deduplicatePujas() {
       const doc = docs[0];
       const rawSlug = String(doc.slug || '');
       const cleanSlug = rawSlug.replace(/-\d+$/, '');
-      if (rawSlug !== cleanSlug) {
-        await Puja.updateOne({ _id: doc._id }, { $set: { slug: cleanSlug } });
+      if (rawSlug !== cleanSlug || !doc.city || !doc.cityName) {
+        const cVal = doc.city || doc.cityName || '';
+        const cNameVal = doc.cityName || doc.city || '';
+        await Puja.updateOne(
+          { _id: doc._id },
+          { $set: { slug: cleanSlug, ...(cVal ? { city: cVal, cityName: cNameVal } : {}) } }
+        );
       }
       continue;
     }

@@ -19,6 +19,7 @@ import { Booking } from '../models/Booking.js';
 import { User } from '../models/User.js';
 import { Blog } from '../models/Blog.js';
 import { dropLegacySingleSlugIndexes } from '../config/db.js';
+import { deduplicatePujas } from '../scripts/cleanDuplicates.js';
 
 export const adminRouter = Router();
 
@@ -27,6 +28,16 @@ adminRouter.use('/auth', authRouter);
 
 // Everything below requires authentication
 adminRouter.use(requireAuth);
+
+adminRouter.post('/clean-duplicates', async (_req, res) => {
+  try {
+    await deduplicatePujas();
+    await generateAndSaveSitemap();
+    res.json({ success: true, message: 'Deduplication completed successfully and sitemap refreshed' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to deduplicate' });
+  }
+});
 
 // 1. Registered Users Section
 adminRouter.use(
@@ -240,9 +251,9 @@ adminRouter.use(
           }
         }
 
-        let cityDoc = await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc._id });
-        if (!cityDoc) {
-          await City.create({
+        let cityDoc = countryDoc ? await City.findOne({ $or: [{ slug: citySlug }, { name: cityName }], countryId: countryDoc._id }) : null;
+        if (!cityDoc && countryDoc) {
+          cityDoc = await City.create({
             name: cityName,
             slug: citySlug,
             countryId: countryDoc._id,
@@ -262,10 +273,21 @@ adminRouter.use(
           if (data.cityIsPopular !== undefined || data.isPopular !== undefined) cityUpdates.isPopular = Boolean(data.cityIsPopular ?? data.isPopular);
           if (data.citySortOrder !== undefined || data.sortOrder !== undefined) cityUpdates.sortOrder = Number(data.citySortOrder ?? data.sortOrder);
 
-          if (Object.keys(cityUpdates).length > 0) {
+          if (cityDoc && Object.keys(cityUpdates).length > 0) {
             await City.updateOne({ _id: cityDoc._id }, { $set: cityUpdates });
           }
         }
+
+        // Always ensure both name & id variants are populated consistently
+        data.city = cityName;
+        data.cityName = cityName;
+        data.citySlug = citySlug;
+        if (cityDoc?._id) {
+          data.cityId = cityDoc._id;
+        }
+        data.country = countryName;
+        data.countryName = countryName;
+        data.countrySlug = countrySlug;
       }
       return data;
     },

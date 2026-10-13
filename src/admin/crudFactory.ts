@@ -242,12 +242,15 @@ export function createCrudRouter(opts: CrudOptions): Router {
       let row: any;
       let isActualCreate = true;
 
-      if (resource === 'puja-pages' && data.bhaktiType === 'location' && data.slug && (data.city || data.cityName)) {
+      if ((resource === 'puja-pages' || resource === 'puja-locations') && data.bhaktiType === 'location' && data.slug && (data.city || data.cityName || data.cityId)) {
         const cityVal = data.city || data.cityName;
         const filter: Record<string, any> = {
           slug: data.slug,
           bhaktiType: 'location',
-          $or: [{ city: cityVal }, { cityName: cityVal }],
+          $or: [
+            ...(cityVal ? [{ city: cityVal }, { cityName: cityVal }] : []),
+            ...(data.cityId ? [{ cityId: data.cityId }] : []),
+          ],
         };
         const existingDoc = await model.findOne(filter);
         if (existingDoc) {
@@ -273,7 +276,7 @@ export function createCrudRouter(opts: CrudOptions): Router {
             }
           }
         }
-      } else if (resource === 'puja-pages' && data.bhaktiType !== 'location' && data.slug) {
+      } else if ((resource === 'puja-pages' || resource === 'puja-locations' || resource === 'pujas') && data.bhaktiType !== 'location' && data.slug) {
         const filter: Record<string, any> = {
           slug: data.slug,
           bhaktiType: { $ne: 'location' },

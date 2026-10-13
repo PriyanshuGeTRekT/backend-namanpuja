@@ -76,9 +76,9 @@ pujaSchema.index(
   { slug: 1 },
   { unique: true, partialFilterExpression: { bhaktiType: 'main' } }
 );
-// Unique per slug + city for location-specific custom pages (allows same slug across different cities)
+// Unique per slug + city for location-specific custom pages (allows same slug across different cities, duplicate only within the same city)
 pujaSchema.index(
-  { slug: 1, city: 1, country: 1 },
+  { slug: 1, city: 1 },
   { unique: true, partialFilterExpression: { bhaktiType: 'location' } }
 );
 
