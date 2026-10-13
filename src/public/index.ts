@@ -18,6 +18,10 @@ import { Blog } from '../models/Blog.js';
 import { buildSitemapXml } from '../utils/sitemap.js';
 import { toSlug } from '../utils/slug.js';
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const publicRouter = Router();
 
 publicRouter.get(
@@ -159,14 +163,18 @@ const getCityDetailHandler = asyncHandler(async (req: Request, res: Response) =>
       : undefined,
   };
 
+  const safeCityName = String((city as any).name || '').trim();
+  const safeCitySlug = String((city as any).slug || '').trim();
+  const cityRegex = safeCityName ? new RegExp(`^${escapeRegex(safeCityName)}$`, 'i') : null;
+
   const locations = await Puja.find({
     bhaktiType: 'location',
+    published: true,
     $or: [
       { cityId: (city as any)._id },
-      { city: (city as any).name },
-      { citySlug: (city as any).slug },
+      ...(cityRegex ? [{ city: cityRegex }, { cityName: cityRegex }] : []),
+      ...(safeCitySlug ? [{ citySlug: safeCitySlug }, { slug: new RegExp(`-in-${escapeRegex(safeCitySlug)}`, 'i') }] : []),
     ],
-    published: { $ne: false },
     enabled: { $ne: false },
   })
     .populate({ path: 'targetPujaId', populate: { path: 'categoryId' } })
@@ -240,18 +248,35 @@ const pujas = await Puja.find(filter)
 publicRouter.get(
   '/pujas/:slug',
   asyncHandler(async (req: Request, res: Response) => {
-    const s = toSlug(req.params.slug);
+    const rawParam = String(req.params.slug || '').trim();
+    const s = toSlug(rawParam);
+    const coreSlug = s.includes('-in-') ? s.split('-in-')[0] : s;
+    const coreWithoutPuja = coreSlug.replace(/-puja$/, '');
 
     // 1. Try exact match first
-    let puja = await Puja.findOne({ slug: s, enabled: { $ne: false } }).populate('category');
+    let puja = await Puja.findOne({
+      slug: { $in: [rawParam, rawParam.toLowerCase(), s, coreSlug, `${coreSlug}-puja`, coreWithoutPuja] },
+      enabled: { $ne: false },
+    }).populate('category');
 
-    // 2. Only fall back to fuzzy variants if no exact match found
+    // 2. Slug starts with or contains core slug
     if (!puja) {
       puja = await Puja.findOne({
         $or: [
-          { slug: s.toLowerCase() },
-          { slug: `${s}-puja` },
-          { slug: s.replace(/-puja$/, '') },
+          { slug: new RegExp(`^${escapeRegex(coreSlug)}`, 'i') },
+          { slug: new RegExp(escapeRegex(coreSlug), 'i') },
+        ],
+        enabled: { $ne: false },
+      }).populate('category');
+    }
+
+    // 3. Fall back to title or name match for slugs with extra descriptive words
+    if (!puja) {
+      const searchWords = coreSlug.replace(/-/g, ' ');
+      puja = await Puja.findOne({
+        $or: [
+          { name: new RegExp(escapeRegex(searchWords), 'i') },
+          { title: new RegExp(escapeRegex(searchWords), 'i') },
         ],
         enabled: { $ne: false },
       }).populate('category');
@@ -339,46 +364,137 @@ publicRouter.get(
 
 
 const getLocationDetailHandler = asyncHandler(async (req: Request, res: Response) => {
-  const reqSlug = toSlug(req.params.slug).replace(/-\d+$/, '');
-  const citySlug = req.params.citySlug ? toSlug(req.params.citySlug) : undefined;
+  const rawParamSlug = String(req.params.slug || '').trim();
+  const reqSlug = toSlug(rawParamSlug).replace(/-\d+$/, '');
+  const rawCitySlug = req.params.citySlug || (req.params as any).slugCity || '';
+  const citySlug = rawCitySlug ? toSlug(rawCitySlug).replace(/-cities$/, '') : undefined;
+
+  // Extract core puja slug without suffixes like "-in-muscat", "-in-dubai", etc.
+  const coreSlug = reqSlug.includes('-in-') ? reqSlug.split('-in-')[0] : reqSlug;
+  const coreWithoutPuja = coreSlug.replace(/-puja$/, '');
+
+  // If slug has "-in-{city}", try to extract inferred city
+  let inferredCityName = '';
+  if (reqSlug.includes('-in-')) {
+    const afterIn = reqSlug.split('-in-')[1] || '';
+    inferredCityName = afterIn.split('-')[0] || '';
+  }
+
+  let city: any = null;
+  const targetCitySlug = citySlug || inferredCityName;
+  if (targetCitySlug) {
+    city = await City.findOne({
+      $or: [
+        { slug: targetCitySlug },
+        { slug: toSlug(targetCitySlug) },
+        { name: new RegExp(`^${escapeRegex(targetCitySlug.replace(/-/g, ' '))}$`, 'i') },
+        { name: new RegExp(escapeRegex(targetCitySlug.replace(/-/g, ' ')), 'i') },
+      ],
+    });
+  }
+
+  const cityMatches: any[] = [];
+  if (city) {
+    cityMatches.push(
+      { cityId: city._id },
+      { city: new RegExp(`^${escapeRegex(city.name)}$`, 'i') },
+      { cityName: new RegExp(`^${escapeRegex(city.name)}$`, 'i') },
+      { citySlug: city.slug },
+    );
+  }
+
+  const populateFields = [
+    { path: 'targetPujaId', populate: { path: 'categoryId' } },
+    { path: 'pujaId', populate: { path: 'categoryId' } },
+    { path: 'categoryId' },
+    { path: 'cityId', populate: { path: 'countryId' } },
+  ];
 
   let location: any = null;
 
-  if (citySlug) {
-    const city = await City.findOne({
-      $or: [
-        { slug: citySlug },
-        { name: new RegExp(`^${citySlug.replace(/-/g, ' ')}$`, 'i') },
-      ],
-    });
-    if (city) {
-      location = await Puja.findOne({
-        slug: reqSlug,
-        bhaktiType: 'location',
-        $or: [{ cityId: city._id }, { city: city.name }, { citySlug: city.slug }],
-        published: { $ne: false },
-        enabled: { $ne: false },
-      }).populate([
-        { path: 'targetPujaId', populate: { path: 'categoryId' } },
-        { path: 'pujaId', populate: { path: 'categoryId' } },
-        { path: 'categoryId' },
-        { path: 'cityId', populate: { path: 'countryId' } },
-      ]);
-    }
+  // Candidate slugs to test for exact match
+  const exactSlugList = [
+    rawParamSlug,
+    rawParamSlug.toLowerCase(),
+    reqSlug,
+    reqSlug.toLowerCase(),
+    coreSlug,
+    `${coreSlug}-puja`,
+    coreWithoutPuja,
+  ];
+
+  // Tier 1: Exact slug match within the city
+  if (cityMatches.length > 0) {
+    location = await Puja.findOne({
+      slug: { $in: exactSlugList },
+      $or: cityMatches,
+      enabled: { $ne: false },
+    }).populate(populateFields);
+  }
+
+  // Tier 2: Exact slug match globally
+  if (!location) {
+    location = await Puja.findOne({
+      slug: { $in: exactSlugList },
+      enabled: { $ne: false },
+    }).populate(populateFields);
+  }
+
+  // Tier 3: Slug starts with or contains core slug (supports long slugs with lots of things in title/slug)
+  const coreRegex = new RegExp(`^${escapeRegex(coreSlug)}`, 'i');
+  const coreRegexAnywhere = new RegExp(escapeRegex(coreSlug), 'i');
+
+  if (!location && cityMatches.length > 0) {
+    location = await Puja.findOne({
+      $or: [{ slug: coreRegex }, { slug: coreRegexAnywhere }],
+      $and: [{ $or: cityMatches }],
+      enabled: { $ne: false },
+    }).populate(populateFields);
   }
 
   if (!location) {
     location = await Puja.findOne({
-      slug: reqSlug,
-      bhaktiType: 'location',
-      published: { $ne: false },
+      $or: [{ slug: coreRegex }, { slug: coreRegexAnywhere }],
       enabled: { $ne: false },
-    }).populate([
-      { path: 'targetPujaId', populate: { path: 'categoryId' } },
-      { path: 'pujaId', populate: { path: 'categoryId' } },
-      { path: 'categoryId' },
-      { path: 'cityId', populate: { path: 'countryId' } },
-    ]);
+    }).populate(populateFields);
+  }
+
+  // Tier 4: Match by title, name, or h1 (e.g. title: "Ganesh Puja in Muscat" with extra keywords)
+  const titleSearchWords = coreSlug.replace(/-/g, ' ');
+  const titleRegex = new RegExp(escapeRegex(titleSearchWords), 'i');
+
+  if (!location && cityMatches.length > 0) {
+    location = await Puja.findOne({
+      $or: [{ name: titleRegex }, { title: titleRegex }, { h1: titleRegex }],
+      $and: [{ $or: cityMatches }],
+      enabled: { $ne: false },
+    }).populate(populateFields);
+  }
+
+  if (!location) {
+    location = await Puja.findOne({
+      $or: [{ name: titleRegex }, { title: titleRegex }, { h1: titleRegex }],
+      enabled: { $ne: false },
+    }).populate(populateFields);
+  }
+
+  // Tier 5: Target puja ID match or fallback to parent main Puja if city matched
+  if (!location && cityMatches.length > 0) {
+    const parentPuja = await Puja.findOne({
+      slug: { $in: [coreSlug, `${coreSlug}-puja`, coreWithoutPuja] },
+      enabled: { $ne: false },
+    });
+    if (parentPuja) {
+      location = await Puja.findOne({
+        $or: [{ targetPujaId: parentPuja._id }, { pujaId: parentPuja._id }],
+        $and: [{ $or: cityMatches }],
+        enabled: { $ne: false },
+      }).populate(populateFields);
+
+      if (!location) {
+        location = parentPuja;
+      }
+    }
   }
 
   if (!location) throw ApiError.notFound('Page not found');
@@ -420,7 +536,14 @@ publicRouter.get('/locations/:slug', getLocationDetailHandler);
 publicRouter.get(
   '/locations',
   asyncHandler(async (_req, res: Response) => {
-    const locations = await Puja.find({ bhaktiType: 'location', published: { $ne: false }, enabled: { $ne: false } })
+    const locations = await Puja.find({
+      $or: [
+        { bhaktiType: 'location' },
+        { city: { $exists: true, $ne: '' } },
+        { cityId: { $exists: true, $ne: null } },
+      ],
+      enabled: { $ne: false },
+    })
       .select('slug updatedAt city citySlug country countrySlug cityId')
       .populate({ path: 'cityId', select: 'slug countryId', populate: { path: 'countryId', select: 'slug' } })
       .lean();

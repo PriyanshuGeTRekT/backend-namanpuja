@@ -135,7 +135,7 @@ export function createApp() {
   app.use('/admin', adminLimiter, adminRouter);
 
   // Public API (rate-limited)
-  const publicLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true });
+  const publicLimiter = rateLimit({ windowMs: 60_000, max: 1000, standardHeaders: true });
   app.use('/api', publicLimiter, publicRouter);
   app.use('/', publicLimiter, publicRouter);
 
